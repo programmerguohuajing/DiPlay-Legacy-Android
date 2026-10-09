@@ -648,4 +648,9 @@
     <string name="bluetooth_adapter_unavailable">В автомагнітолі немає вбудованого адаптера Bluetooth; бездротовий CarPlay недоступний. Використовуйте дротове підключення через USB.</string>
     <string name="usb_iphone_busy_or_occupied">USB-порт iPhone зайнятий іншою програмою (наприклад, штатним плеєром iPod). Закрийте плеєр iPod і перепідключіть кабель.</string>
     <string name="usb_iphone_permission_not_granted">Дозвіл USB для iPhone не отримано. Перевірте запит дозволів, закрийте плеєр iPod і перепідключіть кабель.</string>
+    <string name="bluetooth_device_connected">Підключено</string>
+    <string name="manual_input_mac">Ввести MAC вручну</string>
+    <string name="manual_bluetooth_input_mac_label">MAC-адреса Bluetooth (наприклад, AA:BB:CC:DD:EE:FF):</string>
+    <string name="manual_bluetooth_input_name_label">Назва пристрою:</string>
+    <string name="manual_bluetooth_input_invalid_mac">Недійсна MAC-адреса (формат XX:XX:XX:XX:XX:XX)</string>
 </resources>

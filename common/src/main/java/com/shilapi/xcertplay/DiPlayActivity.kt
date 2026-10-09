@@ -7,7 +7,10 @@ import android.app.AlertDialog
 import android.app.Dialog
 import android.app.TimePickerDialog
 import android.view.Window
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -3774,13 +3777,21 @@ class DiPlayActivity : ComponentActivity() {
     private fun openProjection() {
         startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
+    data class DiscoveredBluetoothDevice(
+        val address: String,
+        val name: String,
+        val isConnected: Boolean,
+    )
+
+    private val bluetoothExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     @android.annotation.SuppressLint("MissingPermission")
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT); return
         }
         val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-            ?: android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+            ?: BluetoothAdapter.getDefaultAdapter()
         if (adapter == null) {
             promptManualBluetoothInput()
             return
@@ -3788,38 +3799,132 @@ class DiPlayActivity : ComponentActivity() {
         if (!adapter.isEnabled) {
             runCatching { adapter.enable() }
         }
-        if (!adapter.isEnabled) {
-            AlertDialog.Builder(this).setTitle(getString(R.string.turn_on_bluetooth))
-                .setMessage(getString(R.string.enable_the_car_s_bluetooth_and_pair_your_iphone_first))
-                .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
-                .setNeutralButton(getString(R.string.manual_hotspot)) { _, _ -> promptManualBluetoothInput() }
-                .setNegativeButton(getString(R.string.later), null).show(); return
+
+        bluetoothExecutor.execute {
+            val devices = fetchSystemBluetoothDevices(adapter)
+            runOnUiThread {
+                if (isFinishing || (Build.VERSION.SDK_INT >= 17 && isDestroyed)) return@runOnUiThread
+                if (devices.isNotEmpty()) {
+                    showChoosePhoneDialog(devices)
+                } else {
+                    promptManualBluetoothInput()
+                }
+            }
         }
-        val devices = runCatching { adapter.bondedDevices.sortedBy { it.name ?: "" } }.getOrDefault(emptyList())
-        if (devices.isEmpty()) {
-            AlertDialog.Builder(this).setTitle(getString(R.string.pair_your_iphone))
-                .setMessage(getString(R.string.on_your_iphone_open_settings_bluetooth_and_pair_with_the_c))
-                .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
-                .setNeutralButton(getString(R.string.manual_hotspot)) { _, _ -> promptManualBluetoothInput() }
-                .setNegativeButton(getString(R.string.got_it), null).show(); return
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun fetchSystemBluetoothDevices(adapter: BluetoothAdapter): List<DiscoveredBluetoothDevice> {
+        val result = LinkedHashMap<String, DiscoveredBluetoothDevice>()
+
+        // 1. Bonded devices from adapter
+        val bonded = runCatching { adapter.bondedDevices.orEmpty() }.getOrDefault(emptySet())
+        for (device in bonded) {
+            val addr = device.address?.uppercase(java.util.Locale.US) ?: continue
+            val connected = isBluetoothDeviceConnected(device)
+            val name = device.name?.takeIf { it.isNotBlank() } ?: getString(R.string.paired_device)
+            result[addr] = DiscoveredBluetoothDevice(addr, name, connected)
         }
-        AlertDialog.Builder(this).setTitle(getString(R.string.choose_your_iphone))
-            .setItems(devices.map { device ->
-                val name = device.name ?: getString(R.string.paired_device)
-                if (devices.count { it.name == device.name } > 1) "$name · ${device.address.takeLast(5)}" else name
-            }.toTypedArray()) { _, index ->
+
+        // 2. Query GATT connected devices via BluetoothManager if available
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            runCatching {
+                (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.let { bm ->
+                    bm.getConnectedDevices(BluetoothProfile.GATT).orEmpty().forEach { device ->
+                        val addr = device.address?.uppercase(java.util.Locale.US) ?: return@forEach
+                        val existing = result[addr]
+                        val name = device.name?.takeIf { it.isNotBlank() }
+                            ?: existing?.name
+                            ?: getString(R.string.paired_device)
+                        result[addr] = DiscoveredBluetoothDevice(addr, name, isConnected = true)
+                    }
+                }
+            }
+        }
+
+        // 3. Query A2DP & HEADSET profile proxies for connected devices
+        runCatching {
+            val profileConnected = queryConnectedProfileDevices(adapter)
+            for (device in profileConnected) {
+                val addr = device.address?.uppercase(java.util.Locale.US) ?: continue
+                val existing = result[addr]
+                val name = device.name?.takeIf { it.isNotBlank() }
+                    ?: existing?.name
+                    ?: getString(R.string.paired_device)
+                result[addr] = DiscoveredBluetoothDevice(addr, name, isConnected = true)
+            }
+        }
+
+        return result.values.sortedWith(
+            compareByDescending<DiscoveredBluetoothDevice> { it.isConnected }
+                .thenByDescending { it.name.contains("iPhone", ignoreCase = true) }
+                .thenBy { it.name }
+        )
+    }
+
+    private fun isBluetoothDeviceConnected(device: BluetoothDevice): Boolean = try {
+        val method = BluetoothDevice::class.java.getMethod("isConnected")
+        method.invoke(device) as? Boolean == true
+    } catch (_: Throwable) {
+        false
+    }
+
+    private fun queryConnectedProfileDevices(adapter: BluetoothAdapter): Set<BluetoothDevice> {
+        val connected = java.util.Collections.synchronizedSet(mutableSetOf<BluetoothDevice>())
+        val latch = java.util.concurrent.CountDownLatch(2)
+
+        val listener = object : BluetoothProfile.ServiceListener {
+            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                try {
+                    proxy.connectedDevices?.let { connected.addAll(it) }
+                } catch (_: Throwable) {
+                } finally {
+                    runCatching { adapter.closeProfileProxy(profile, proxy) }
+                    latch.countDown()
+                }
+            }
+
+            override fun onServiceDisconnected(profile: Int) {
+                latch.countDown()
+            }
+        }
+
+        val hasHeadset = runCatching { adapter.getProfileProxy(this, listener, BluetoothProfile.HEADSET) }.getOrDefault(false)
+        if (!hasHeadset) latch.countDown()
+
+        val hasA2dp = runCatching { adapter.getProfileProxy(this, listener, BluetoothProfile.A2DP) }.getOrDefault(false)
+        if (!hasA2dp) latch.countDown()
+
+        runCatching { latch.await(600, java.util.concurrent.TimeUnit.MILLISECONDS) }
+        return synchronized(connected) { connected.toSet() }
+    }
+
+    private fun showChoosePhoneDialog(devices: List<DiscoveredBluetoothDevice>) {
+        val items = devices.map { device ->
+            val status = if (device.isConnected) " · ${getString(R.string.bluetooth_device_connected)}" else ""
+            val duplicate = devices.count { it.name == device.name } > 1
+            val disambiguation = if (duplicate) " (${device.address.takeLast(5)})" else ""
+            "${device.name}$disambiguation$status"
+        }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.choose_your_iphone))
+            .setItems(items) { _, index ->
                 val device = devices[index]
-                DiPlayPreferences.savePhone(this, device.address, device.name ?: "iPhone")
-                val start = pendingWireless; pendingWireless = false
+                DiPlayPreferences.savePhone(this, device.address, device.name)
+                val start = pendingWireless
+                pendingWireless = false
                 render()
                 if (start) connect(true)
-            }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> promptManualBluetoothInput() }
-            .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
+            }
+            .setNeutralButton(getString(R.string.manual_input_mac)) { _, _ -> promptManualBluetoothInput() }
+            .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }
+            .show()
     }
 
     private fun promptManualBluetoothInput() {
         val fields = column().apply { setPadding(dp(24), dp(12), dp(24), dp(12)) }
-        fields.addView(label("Bluetooth MAC Address (e.g. AA:BB:CC:DD:EE:FF):", 14, MUTED))
+        fields.addView(label(getString(R.string.manual_bluetooth_input_mac_label), 14, MUTED))
         val input = EditText(this).apply {
             hint = "00:11:22:33:44:55"
             setText(DiPlayPreferences.phoneAddress(this@DiPlayActivity) ?: "")
@@ -3831,7 +3936,7 @@ class DiPlayActivity : ComponentActivity() {
             setSingleLine()
         }
         fields.addView(input)
-        fields.addView(label("Device Name:", 14, MUTED))
+        fields.addView(label(getString(R.string.manual_bluetooth_input_name_label), 14, MUTED))
         fields.addView(nameInput)
         val error = label("", 14, WARNING)
         fields.addView(error)
@@ -3845,9 +3950,9 @@ class DiPlayActivity : ComponentActivity() {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val rawMac = input.text.toString().trim().uppercase()
+                val rawMac = input.text.toString().trim().uppercase(java.util.Locale.US)
                 val name = nameInput.text.toString().trim().ifEmpty { "iPhone" }
-                if (android.bluetooth.BluetoothAdapter.checkBluetoothAddress(rawMac)) {
+                if (BluetoothAdapter.checkBluetoothAddress(rawMac)) {
                     DiPlayPreferences.savePhone(this@DiPlayActivity, rawMac, name)
                     val start = pendingWireless
                     pendingWireless = false
@@ -3855,7 +3960,7 @@ class DiPlayActivity : ComponentActivity() {
                     render()
                     if (start) connect(true)
                 } else {
-                    error.text = "Invalid MAC address (format XX:XX:XX:XX:XX:XX)"
+                    error.text = getString(R.string.manual_bluetooth_input_invalid_mac)
                 }
             }
         }

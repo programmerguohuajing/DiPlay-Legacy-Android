@@ -696,4 +696,9 @@
     <string name="bluetooth_adapter_unavailable">车机未提供原生蓝牙适配器，无法进行无线连接引导。请在设置中切换为【有线连接】并使用 USB 数据线连接。</string>
     <string name="usb_iphone_busy_or_occupied">iPhone USB 接口被原车系统或其他应用占用（如原车 iPod 播放器），请在车机中退出该应用并重新拔插数据线。</string>
     <string name="usb_iphone_permission_not_granted">未能获取 iPhone USB 权限（可能被原车系统拦截或未弹出授权窗口），请尝试退出原车 iPod 播放器并重新插拔 USB。</string>
+    <string name="bluetooth_device_connected">已连接</string>
+    <string name="manual_input_mac">手动输入 MAC</string>
+    <string name="manual_bluetooth_input_mac_label">蓝牙 MAC 地址（例如 AA:BB:CC:DD:EE:FF）：</string>
+    <string name="manual_bluetooth_input_name_label">设备名称：</string>
+    <string name="manual_bluetooth_input_invalid_mac">无效的 MAC 地址（格式为 XX:XX:XX:XX:XX:XX）</string>
 </resources>

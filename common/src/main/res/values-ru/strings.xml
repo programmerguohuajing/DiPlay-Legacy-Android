@@ -636,4 +636,9 @@
     <string name="bluetooth_adapter_unavailable">В магнитоле нет встроенного адаптера Bluetooth; беспроводной CarPlay недоступен. Используйте проводное подключение по USB.</string>
     <string name="usb_iphone_busy_or_occupied">USB-порт iPhone занят другим приложением (например, штатным плеером iPod). Закройте плеер iPod и переподключите кабель.</string>
     <string name="usb_iphone_permission_not_granted">Разрешение USB для iPhone не получено. Проверьте запрос разрешений, закройте плеер iPod и переподключите кабель.</string>
+    <string name="bluetooth_device_connected">Подключено</string>
+    <string name="manual_input_mac">Ввести MAC вручную</string>
+    <string name="manual_bluetooth_input_mac_label">MAC-адрес Bluetooth (например, AA:BB:CC:DD:EE:FF):</string>
+    <string name="manual_bluetooth_input_name_label">Имя устройства:</string>
+    <string name="manual_bluetooth_input_invalid_mac">Недействительный MAC-адрес (формат XX:XX:XX:XX:XX:XX)</string>
 </resources>

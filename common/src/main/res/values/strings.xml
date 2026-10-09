@@ -733,4 +733,9 @@
     <string name="bluetooth_adapter_unavailable">Head unit has no native Bluetooth adapter; wireless CarPlay unavailable. Please use a wired USB cable.</string>
     <string name="usb_iphone_busy_or_occupied">iPhone USB is busy or occupied by another app (e.g. car iPod player). Close the car iPod app and reconnect the cable.</string>
     <string name="usb_iphone_permission_not_granted">iPhone USB permission was not granted. Check for system permission prompts, exit any car iPod app, and reconnect.</string>
+    <string name="bluetooth_device_connected">Connected</string>
+    <string name="manual_input_mac">Manual MAC</string>
+    <string name="manual_bluetooth_input_mac_label">Bluetooth MAC Address (e.g. AA:BB:CC:DD:EE:FF):</string>
+    <string name="manual_bluetooth_input_name_label">Device Name:</string>
+    <string name="manual_bluetooth_input_invalid_mac">Invalid MAC address (format XX:XX:XX:XX:XX:XX)</string>
 </resources>

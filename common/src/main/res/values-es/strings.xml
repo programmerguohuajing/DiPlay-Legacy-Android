@@ -636,4 +636,9 @@
     <string name="bluetooth_adapter_unavailable">La unidad principal no tiene adaptador Bluetooth nativo; CarPlay inalámbrico no disponible. Use un cable USB con cable.</string>
     <string name="usb_iphone_busy_or_occupied">El USB del iPhone está ocupado por otra app (p. ej., reproductor de iPod del coche). Cierre la app y vuelva a conectar el cable.</string>
     <string name="usb_iphone_permission_not_granted">No se otorgó el permiso USB del iPhone. Compruebe las solicitudes de permisos, cierre la app de iPod y vuelva a conectar.</string>
+    <string name="bluetooth_device_connected">Conectado</string>
+    <string name="manual_input_mac">MAC manual</string>
+    <string name="manual_bluetooth_input_mac_label">Dirección MAC de Bluetooth (ej. AA:BB:CC:DD:EE:FF):</string>
+    <string name="manual_bluetooth_input_name_label">Nombre del dispositivo:</string>
+    <string name="manual_bluetooth_input_invalid_mac">Dirección MAC no válida (formato XX:XX:XX:XX:XX:XX)</string>
 </resources>

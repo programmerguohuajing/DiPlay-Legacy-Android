@@ -636,4 +636,9 @@
     <string name="bluetooth_adapter_unavailable">لا تحتوي الوحدة الرئيسية على محول بلوتوث أصلي؛ لا يتوفر CarPlay اللاسلكي. يرجى استخدام كابل USB سلكي.</string>
     <string name="usb_iphone_busy_or_occupied">منفذ USB الخاص بـ iPhone مشغول أو مستخدم بواسطة تطبيق آخر (مثل مشغل iPod بالسيارة). أغلق مشغل iPod وأعد توصيل الكابل.</string>
     <string name="usb_iphone_permission_not_granted">لم يتم منح إذن USB لـ iPhone. تحقق من موجه الأذونات، وأغلق تطبيق iPod للسيارة، وأعد التوصيل.</string>
+    <string name="bluetooth_device_connected">متصل</string>
+    <string name="manual_input_mac">إدخال MAC يدوياً</string>
+    <string name="manual_bluetooth_input_mac_label">عنوان MAC للبلوتوث (مثال AA:BB:CC:DD:EE:FF):</string>
+    <string name="manual_bluetooth_input_name_label">اسم الجهاز:</string>
+    <string name="manual_bluetooth_input_invalid_mac">عنوان MAC غير صالح (التنسيق XX:XX:XX:XX:XX:XX)</string>
 </resources>
