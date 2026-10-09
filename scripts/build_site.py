@@ -8,7 +8,7 @@ SITE = ROOT / 'site'
 data = json.loads((SITE / 'content.json').read_text(encoding='utf-8'))
 BASE = 'https://programmerguohuajing.github.io/DiPlay-Legacy-Android/'
 REPO = 'https://github.com/programmerguohuajing/DiPlay-Legacy-Android'
-VERSION = '0.2.23'
+VERSION = '0.2.25'
 RELEASE = REPO + f'/releases/tag/v{VERSION}'
 DOWNLOAD = REPO + f'/releases/download/v{VERSION}/DiPlay-v{VERSION}-legacy-release.apk'
 for lang, d in data.items():
