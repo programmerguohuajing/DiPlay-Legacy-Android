@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -727,14 +728,33 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun requestVpnConsent() {
         if (awaitingVpnConsent) return
-        val consent = CarPlayVpnService.prepare(this)
+        val consent = try {
+            CarPlayVpnService.prepare(this)
+        } catch (e: Exception) {
+            Log.w(TAG, "CarPlayVpnService.prepare failed", e)
+            null
+        }
         if (consent == null) {
             vpnReady = true
             maybeStartCarPlay()
         } else {
             vpnReady = false
             awaitingVpnConsent = true
-            vpnConsent.launch(consent)
+            try {
+                vpnConsent.launch(consent)
+            } catch (e: ActivityNotFoundException) {
+                Log.w(TAG, "VPN confirmation dialog not found on device (com.android.vpndialogs missing)", e)
+                appendLog("VPN dialog unavailable (com.android.vpndialogs missing), proceeding")
+                awaitingVpnConsent = false
+                vpnReady = true
+                maybeStartCarPlay()
+            } catch (e: SecurityException) {
+                Log.w(TAG, "VPN confirmation dialog launch permission denied", e)
+                appendLog("VPN dialog launch denied, proceeding")
+                awaitingVpnConsent = false
+                vpnReady = true
+                maybeStartCarPlay()
+            }
         }
     }
 

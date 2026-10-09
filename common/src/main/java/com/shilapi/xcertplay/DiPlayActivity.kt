@@ -9,7 +9,7 @@ import android.app.TimePickerDialog
 import android.view.Window
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
+import com.shilapi.xcertplay.compat.BluetoothCompat
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Intent
@@ -3790,8 +3790,7 @@ class DiPlayActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT); return
         }
-        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-            ?: BluetoothAdapter.getDefaultAdapter()
+        val adapter = BluetoothCompat.getAdapter(this)
         if (adapter == null) {
             promptManualBluetoothInput()
             return
@@ -3828,17 +3827,14 @@ class DiPlayActivity : ComponentActivity() {
 
         // 2. Query GATT connected devices via BluetoothManager if available
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            runCatching {
-                (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.let { bm ->
-                    bm.getConnectedDevices(BluetoothProfile.GATT).orEmpty().forEach { device ->
-                        val addr = device.address?.uppercase(java.util.Locale.US) ?: return@forEach
-                        val existing = result[addr]
-                        val name = device.name?.takeIf { it.isNotBlank() }
-                            ?: existing?.name
-                            ?: getString(R.string.paired_device)
-                        result[addr] = DiscoveredBluetoothDevice(addr, name, isConnected = true)
-                    }
-                }
+            val gattDevices = BluetoothCompat.getConnectedGattDevices(this)
+            for (device in gattDevices) {
+                val addr = device.address?.uppercase(java.util.Locale.US) ?: continue
+                val existing = result[addr]
+                val name = device.name?.takeIf { it.isNotBlank() }
+                    ?: existing?.name
+                    ?: getString(R.string.paired_device)
+                result[addr] = DiscoveredBluetoothDevice(addr, name, isConnected = true)
             }
         }
 

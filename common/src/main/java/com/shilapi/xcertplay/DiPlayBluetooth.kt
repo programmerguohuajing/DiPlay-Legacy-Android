@@ -1,14 +1,14 @@
 package com.shilapi.xcertplay
 
-import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.provider.Settings
+import com.shilapi.xcertplay.compat.BluetoothCompat
 
 internal object DiPlayBluetooth {
     @android.annotation.SuppressLint("MissingPermission")
     fun localAddress(context: Context): String? {
         val adapter = runCatching {
-            (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter?.address
+            BluetoothCompat.getAdapter(context)?.address
         }.getOrNull()
         val setting = runCatching { Settings.Secure.getString(context.contentResolver, "bluetooth_address") }.getOrNull()
         return listOfNotNull(adapter, setting).firstOrNull {

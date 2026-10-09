@@ -5,8 +5,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
-import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import com.shilapi.xcertplay.compat.BluetoothCompat
 import android.bluetooth.BluetoothSocket
 import android.content.ComponentName
 import android.content.Context
@@ -187,13 +187,7 @@ class CarPlayController(
         @Suppress("DEPRECATION")
         context.getSystemService(Context.USB_SERVICE) as? UsbManager
     }
-    private val bluetoothAdapter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        appContext.getSystemService(BluetoothManager::class.java)?.adapter
-    } else {
-        @Suppress("DEPRECATION")
-        (appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-            ?: android.bluetooth.BluetoothAdapter.getDefaultAdapter()
-    }
+    private val bluetoothAdapter = BluetoothCompat.getAdapter(appContext)
     private val iphoneHost by lazy {
         IphoneUsbHost(
             appContext,
