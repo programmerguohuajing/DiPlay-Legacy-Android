@@ -51,11 +51,33 @@ class DiPlayApplication : MultiDexApplication() {
 
             Log.e(TAG, logEntry)
 
+            // 1. Always write to private app directory (preserved)
             runCatching {
                 val logDir = File(context.filesDir, "logs")
                 if (!logDir.exists()) logDir.mkdirs()
                 val logFile = File(logDir, "diplay_crash.log")
                 logFile.appendText(logEntry)
+            }
+
+            // 2. Also write to app-specific external files dir if available (accessible via MTP/file manager)
+            runCatching {
+                val externalDir = context.getExternalFilesDir("logs")
+                if (externalDir != null) {
+                    if (!externalDir.exists()) externalDir.mkdirs()
+                    File(externalDir, "diplay_crash.log").appendText(logEntry)
+                }
+            }
+
+            // 3. On legacy Android (API <= 28), also attempt to write to public SD card root /mnt/sdcard/
+            // for head units without root access (e.g. Chery eQ1, Allwinner T3)
+            if (Build.VERSION.SDK_INT <= 28) {
+                runCatching {
+                    @Suppress("DEPRECATION")
+                    val sdcardDir = android.os.Environment.getExternalStorageDirectory()
+                    if (sdcardDir != null && sdcardDir.canWrite()) {
+                        File(sdcardDir, "diplay_crash.log").appendText(logEntry)
+                    }
+                }
             }
         }
     }
