@@ -53,7 +53,7 @@ android {
             optimization {
                 enable = false
             }
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (signingConfigs.getByName("release").storeFile?.isFile == true) { signingConfigs.getByName("release") } else { signingConfigs.getByName("debug") }
         }
     }
     compileOptions {
