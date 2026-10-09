@@ -69,7 +69,10 @@ Based on [xcertplay](https://github.com/shilapi/xcertplay), GPL-3.0. The home/se
 
 This repository starts with a clean public source snapshot. Local research, tester reports and release-signing secrets are excluded. The complete source corresponding to the APK is provided with every release; experimental runtime identity assets are described separately in the build instructions and notices.
 
-## Local release packaging
+## Community & Feedback
 
-The release APK intentionally contains the experimental accessory identity. The Git repository and source archive exclude all accessory and Android signing keys; tests generate synthetic identities at runtime. Source/CI builds omit runtime identity assets by default. Local release builds explicitly select an external asset directory. Publishing the APK makes its bundled identity extractable; building locally does not preserve that identity's confidentiality.
+- **Issues & Discussions**: Feel free to discuss questions and issues in [GitHub Issues](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues). We will reply whenever time permits.
+- **Attach Diagnostic Logs**: When reporting a specific problem, attaching detailed diagnostic logs (via **Settings → Diagnostics → Save diagnostic report**, automatically exported to USB/SD cards since v0.2.27) and environment details (head-unit model, Android version, iPhone/iOS version) is strongly recommended.
+- **Contributions Welcome**: Pull Requests (PRs) from experienced developers are warmly welcomed to help improve compatibility across various legacy automotive hardware!
+- ⭐ **Support**: If this project is helpful to you, please give it a **Star**!
 

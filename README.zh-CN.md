@@ -81,12 +81,15 @@
 
 ---
 
-## 问题反馈与诊断报告
+## 问题反馈与交流讨论
 
-如遇到连接或使用问题，欢迎提交 Issue：
-1. 打开 DiPlay【设置】→【诊断】→【保存诊断报告】。
-2. 导出生成的 `.txt` 诊断报告。
-3. 前往 [Issues](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues) 发帖反馈，并注明您的车机型号、实际 Android 系统版本、手机型号及 iOS 版本。
+- **Issues 讨论**：如果遇到任何问题，欢迎在 [Issues](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues) 中发帖讨论，作者有时间就会回复解答。
+- **提供日志**：遇到具体问题时，**最好贴出详细的运行日志或诊断报告**，以便快速排查定位问题：
+  1. 打开 DiPlay【设置】→【诊断】→【保存诊断报告】（v0.2.27 起已支持自动同步写入插上的 U 盘及 SD 卡根目录 `/mnt/sdcard/DiPlay/`）。
+  2. 将导出的 `.txt` 诊断报告或相关截图/崩溃信息附在 Issue 描述中。
+  3. 注明车机芯片型号、实际 Android 系统版本、iPhone 型号及 iOS 版本。
+- **欢迎提交 PR**：老车机硬件型号繁多、ROM 深度定制，欢迎有能力的开发者提交 Pull Request (PR) 共同完善兼容支持！
+- ⭐ **点赞支持**：如果这个项目对你的老车机有所帮助，请顺手帮我点个 **Star**，感谢大家的支持与鼓励！
 
 ---
 
