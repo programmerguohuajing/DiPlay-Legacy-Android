@@ -1590,7 +1590,7 @@ private class AudioRenderer(
         selection: AudioChannelSelection,
         streamOverride: Int,
     ): AudioAttributes {
-        if (streamOverride in AudioManager.STREAM_SYSTEM..AudioManager.STREAM_ACCESSIBILITY) {
+        if (streamOverride in AudioManager.STREAM_SYSTEM..STREAM_ACCESSIBILITY_COMPAT) {
             // Android accepts only its defined legacy stream IDs here. BYD audio policy can
             // map these standard streams to vehicle outputs; arbitrary channel numbers are
             // not valid AudioAttributes legacy stream types.
@@ -1927,8 +1927,12 @@ private class AudioRenderer(
     private fun startPlayback(track: AudioTrack) {
         diagnosticStage = "track-play"
         underrunsAtPlaybackStart = track.compatUnderruns()
-        track.play()
-        playbackStarted = true
+        try {
+            track.play()
+            playbackStarted = true
+        } catch (error: IllegalStateException) {
+            Log.w(TAG, "AudioTrack play failed state=${track.state}", error)
+        }
     }
 
     private fun maintainPlaybackBuffer() {
@@ -1937,7 +1941,11 @@ private class AudioRenderer(
                 track.compatUnderruns() > underrunsAtPlaybackStart, queue.isEmpty(), track.playbackHeadPosition)) {
             // The hardware buffer has actually drained. Pause without flushing or discarding PCM,
             // then use the configured start threshold again when music resumes.
-            track.pause()
+            try {
+                track.pause()
+            } catch (error: IllegalStateException) {
+                Log.w(TAG, "AudioTrack pause failed state=${track.state}", error)
+            }
             playbackStarted = false
             prebufferBytes = 0
             rebufferCount++
@@ -2071,6 +2079,8 @@ private class AudioRenderer(
 
     private companion object {
         const val TAG = "xcertplay-usb"
+        // AudioManager.STREAM_ACCESSIBILITY was added in API 26 (value 10). Keep compatibility for API < 26.
+        const val STREAM_ACCESSIBILITY_COMPAT = 10
         const val AAC_OBJECT_TYPE_LC = 2
         const val MIN_OPUS_PACKET_BYTES = 4
         const val OPUS_CODEC_DELAY_NANOS = 6_500_000L

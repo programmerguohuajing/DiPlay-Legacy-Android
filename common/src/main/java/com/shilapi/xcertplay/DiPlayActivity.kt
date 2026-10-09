@@ -2,6 +2,7 @@
 // UI copy and visual language adapted from DiAuto. See docs/THIRD_PARTY_NOTICES.md.
 package com.shilapi.xcertplay
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.AlertDialog
 import android.app.Dialog
@@ -4012,6 +4013,7 @@ class DiPlayActivity : ComponentActivity() {
             }.setNegativeButton(getString(R.string.cancel), null).show()
     }
 
+    @SuppressLint("MissingPermission")
     private fun resetWirelessGroup() {
         val manager = getSystemService(Context.WIFI_P2P_SERVICE) as? android.net.wifi.p2p.WifiP2pManager
         if (manager == null) { toast(getString(R.string.this_head_unit_does_not_support_wi_fi_direct)); return }
