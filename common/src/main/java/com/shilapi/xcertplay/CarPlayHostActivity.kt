@@ -49,7 +49,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.SeekBar
-import androidx.appcompat.widget.SwitchCompat
+import android.widget.Switch
 import androidx.core.content.ContextCompat
 import androidx.core.widget.CompoundButtonCompat
 import android.widget.TextView
@@ -300,7 +300,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var remoteMfiServerInput: EditText? = null
     private var remoteMfiTokenInput: EditText? = null
     private var settingsBaseline: SettingsBaseline? = null
-    private var locationReportingSwitch: SwitchCompat? = null
+    private var locationReportingSwitch: Switch? = null
     private var statusView: TextView? = null
     private var statusScrollView: ScrollView? = null
     private var stageStatusView: TextView? = null
@@ -642,6 +642,7 @@ class CarPlayHostActivity : ComponentActivity() {
             ambientDelaySeconds,
             nightSchedule,
         )
+        darkMode = nightModeController.night
         gestureFingerCount = AirPlayPersistence.loadSettingsGestureFingers(this)
         displayScalePercent = AirPlayPersistence.loadDisplayScalePercent(this)
         displayScaleTenths = CarPlayDisplayScale.sanitize((displayScalePercent + 5) / 10)
@@ -853,6 +854,10 @@ class CarPlayHostActivity : ComponentActivity() {
                 nightSchedule)
         }
         nightModeController.resume(systemNight)
+        darkMode = nightModeController.night
+        if (activeAirPlaySession != null) {
+            syncAirPlayDarkMode(ThemeModeDiagnostics.Source.RESUME)
+        }
         if (!menuOpen) {
             displayScalePercent = AirPlayPersistence.loadDisplayScalePercent(this)
             displayScaleTenths = CarPlayDisplayScale.sanitize((displayScalePercent + 5) / 10)
@@ -2470,20 +2475,24 @@ class CarPlayHostActivity : ComponentActivity() {
                 menuText(getString(R.string.report_location_to_iphone), 20f, MENU_SECONDARY),
                 LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
             )
-            val switch = SwitchCompat(this@CarPlayHostActivity).apply {
+            val switch = Switch(this@CarPlayHostActivity).apply {
                 isChecked = locationReportingEnabled
                 contentDescription = getString(R.string.report_android_location_to_the_iphone)
-                showText = false
-                textOn = ""
-                textOff = ""
-                thumbTintList = ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(MENU_ACCENT, MENU_SECONDARY),
-                )
-                trackTintList = ColorStateList(
-                    arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                    intArrayOf(MENU_ACCENT_TRACK, MENU_TRACK_OFF),
-                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    showText = false
+                    textOn = ""
+                    textOff = ""
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    thumbTintList = ColorStateList(
+                        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                        intArrayOf(MENU_ACCENT, MENU_SECONDARY),
+                    )
+                    trackTintList = ColorStateList(
+                        arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                        intArrayOf(MENU_ACCENT_TRACK, MENU_TRACK_OFF),
+                    )
+                }
                 setOnCheckedChangeListener { _, checked ->
                     onLocationReportingChanged(checked)
                 }
@@ -3709,14 +3718,10 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun loadAirPlayIcon(): AirPlayIcon {
-        val customBytes = try {
-            AirPlayPersistence.loadCustomAirPlayIconFile(this)?.readBytes()
-        } catch (_: Exception) {
-            null
-        }
+        val customBytes = AirPlayPersistence.loadCustomAirPlayIconBytes(this)
         if (customBytes != null) {
             decodeAirPlayIcon(customBytes)?.let { return it }
-            AirPlayPersistence.clearCustomAirPlayIcon(this)
+            Log.w(TAG, "Custom AirPlay icon could not be decoded, falling back to default")
         }
         return decodeAirPlayIcon(defaultAirPlayIconBytes())
             ?: throw IllegalStateException("Packaged AirPlay icon is invalid")
@@ -3739,14 +3744,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun updateAirPlayIconPreview() {
         val preview = iconPreviewView ?: return
-        val custom = AirPlayPersistence.loadCustomAirPlayIconFile(this)
-        var customBitmap: Bitmap? = null
-        if (custom != null) {
-            customBitmap = BitmapFactory.decodeFile(custom.absolutePath)
-            if (customBitmap == null) {
-                AirPlayPersistence.clearCustomAirPlayIcon(this)
-            }
-        }
+        val customBitmap = AirPlayPersistence.loadCustomAirPlayIconBitmap(this)
         val bitmap = customBitmap ?: BitmapFactory.decodeResource(resources, R.raw.placeholder_icon)
         preview.setImageBitmap(bitmap)
         iconStatusView?.text =
@@ -4252,7 +4250,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun syncAirPlayDarkMode(source: ThemeModeDiagnostics.Source) {
         val session = activeAirPlaySession
-        val night = darkMode
+        val night = nightModeController.night
+        darkMode = night
         if (session == null) {
             appendLog("THEME_DIAGNOSTIC request source=${source.label} applied=${if (night) "dark" else "light"} sessionActive=false")
             return

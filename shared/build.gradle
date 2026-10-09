@@ -17,6 +17,9 @@ android {
         externalNativeBuild {
             ndkBuild {
                 arguments 'APP_PLATFORM=android-19'
+                if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+                    arguments 'HOST_OS=windows'
+                }
             }
         }
 

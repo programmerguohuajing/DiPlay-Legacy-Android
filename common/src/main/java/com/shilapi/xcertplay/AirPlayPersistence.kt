@@ -19,6 +19,9 @@ import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import com.shilapi.xcertplay.network.WifiP2pChannels
 import com.shilapi.xcertplay.transport.LockdownPairRecord
 import java.io.File
+import java.io.FileOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 
 /** SharedPreferences persistence for the accessory identity and paired controllers. */
 object AirPlayPersistence {
@@ -919,10 +922,27 @@ object AirPlayPersistence {
     fun loadCustomAirPlayIconFile(context: Context): File? =
         File(context.filesDir, CUSTOM_ICON_FILE).takeIf { it.isFile }
 
+    fun loadCustomAirPlayIconBytes(context: Context): ByteArray? = try {
+        loadCustomAirPlayIconFile(context)?.readBytes()?.takeIf { it.isNotEmpty() }
+    } catch (_: Throwable) {
+        null
+    }
+
+    fun loadCustomAirPlayIconBitmap(context: Context): Bitmap? = try {
+        loadCustomAirPlayIconBytes(context)?.let { bytes ->
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }
+    } catch (_: Throwable) {
+        null
+    }
+
     fun saveCustomAirPlayIcon(context: Context, encodedImage: ByteArray) {
         require(encodedImage.isNotEmpty()) { "AirPlay icon data must not be empty" }
-        File(context.filesDir, CUSTOM_ICON_FILE).outputStream().use { output ->
+        val file = File(context.filesDir, CUSTOM_ICON_FILE)
+        FileOutputStream(file).use { output ->
             output.write(encodedImage)
+            output.flush()
+            output.fd.sync()
         }
     }
 

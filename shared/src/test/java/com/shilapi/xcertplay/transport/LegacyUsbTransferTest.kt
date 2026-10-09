@@ -13,9 +13,9 @@ class LegacyUsbTransferTest {
         assertEquals(65536, usbTransferSize(28, 65536))
     }
 
-    @Test fun largeWritesPreserveEveryByteAndOffsetOnAndroidEight() {
+    @Test fun largeWritesPreserveEveryByteAndOffsetOnLegacyAndroid() {
         val data = ByteArray(65573) { (it % 251).toByte() }
-        for (sdk in listOf(26, 27, 28)) {
+        for (sdk in listOf(19, 24, 25, 26, 27, 28)) {
             val output = java.io.ByteArrayOutputStream()
             val sizes = mutableListOf<Int>()
             assertEquals(data.size, writeUsbChunks(data.size, sdk, 1000) { offset, count, timeout ->

@@ -87,4 +87,23 @@ class LauncherIntentTest {
         assertNull(shadowOf(activity).nextStartedActivity)
         assertEquals(0, stops)
     }
+
+    @Test fun hotResumeWithActiveSessionRedirectsToCarPlayHostActivity() {
+        controller = Robolectric.buildActivity(DiPlayActivity::class.java, launcher())
+            .create(Bundle().apply { putString("page", "settings") })
+            .start().resume()
+        val activity = controller!!.get()
+        assertEquals(0, stops)
+        shadowOf(activity).clearNextStartedActivities()
+
+        // User navigates back to home inside DiPlay
+        ReflectionHelpers.setField(activity, "page", "home")
+        // User leaves the app (e.g. backgrounded)
+        controller!!.pause().stop()
+
+        // User brings DiPlay back to foreground (hot resume) while session is active
+        controller!!.restart().start().resume()
+        assertEquals(CarPlayHostActivity::class.java.name,
+            shadowOf(activity).nextStartedActivity?.component?.className)
+    }
 }

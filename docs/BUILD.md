@@ -31,7 +31,7 @@ Install these tools:
 - Android SDK Platform 37 (`platforms;android-37.0`).
 - Android SDK Build-Tools 36.0.0.
 - Android SDK Platform-Tools.
-- Android NDK 28.2.13676358.
+- Android NDK 25.2.9519653 (r25c), required for Android 4.4 / API 19 native compatibility.
 
 Use the Gradle wrapper included in this repository.
 The first build needs an internet connection to download dependencies.
@@ -57,7 +57,7 @@ java -version
 ```
 
 The output must identify Java 25.
-On Windows, use `gradlew.bat` in place of `./gradlew` in the commands below.
+On Windows, use `gradlew.bat` in place of `./gradlew` in the commands below. The shared native build explicitly passes `HOST_OS=windows` to NDK r25c, so Git for Windows `uname` output cannot break host detection.
 
 ## Build the main app
 

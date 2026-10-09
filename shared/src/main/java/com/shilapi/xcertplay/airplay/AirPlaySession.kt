@@ -411,7 +411,9 @@ class AirPlaySession(
 
     fun setNightMode(night: Boolean): Boolean = synchronized(eventWriteLock) {
         pendingNightMode = night
-        sendPendingNightModeLocked()
+        val sent = sendPendingNightModeLocked()
+        Log.i(TAG, "AirPlay setNightMode night=$night eventReady=${eventSocket != null && eventCipher != null} sent=$sent")
+        sent
     }
 
     private fun sendPendingNightModeLocked(): Boolean {

@@ -13,6 +13,7 @@ internal class ThemeModeDiagnostics {
         CALLBACK("configuration-callback"),
         WINDOW_FOCUS("window-focus"),
         SESSION_ACTIVE("session-active", true),
+        RESUME("resume", true),
     }
 
     private data class State(val uiMode: Int, val appliedNight: Boolean, val sessionActive: Boolean)

@@ -246,6 +246,7 @@ class DiPlayActivity : ComponentActivity() {
     }
 
     private var languagePreferenceAtCreate = AppLocale.SYSTEM
+    private var userNavigatedFromCarPlay = false
 
     private var interfaceOverride: Configuration? = null
     private var interfaceSystemDensityDpi = 0
@@ -273,6 +274,9 @@ class DiPlayActivity : ComponentActivity() {
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
         if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
             openProjection(); finish(); return
+        }
+        if (intent.hasExtra("page")) {
+            userNavigatedFromCarPlay = true
         }
         enforceInterfaceSize()
         languagePreferenceAtCreate = AppLocale.preference(this)
@@ -318,9 +322,19 @@ class DiPlayActivity : ComponentActivity() {
         // CarPlay runs in its own task, so the launcher icon resumes this one. Settings opened from
         // CarPlay carry a "page" extra, which isLauncherIntent rejects.
         if (isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
+            userNavigatedFromCarPlay = false
             page = "home"; render(); openProjection(); return
         }
-        page = intent.getStringExtra("page") ?: "home"; render()
+        val explicitPage = intent.getStringExtra("page")
+        if (explicitPage != null) {
+            userNavigatedFromCarPlay = true
+            page = explicitPage
+            render()
+        } else if (CarPlayBackgroundSession.hasSession() && !userNavigatedFromCarPlay) {
+            page = "home"; render(); openProjection(); return
+        } else {
+            page = "home"; render()
+        }
         automaticVehicleValidationStarted = false
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
@@ -392,6 +406,10 @@ class DiPlayActivity : ComponentActivity() {
         if (!initialLaunch && !adbSwitchChangePending && !pausedForAdbSwitchChange &&
             (page == "home" || page == "settings" || page == "connection")) render()
         pausedForAdbSwitchChange = false
+        if (!initialLaunch && CarPlayBackgroundSession.hasSession() && page == "home" && !userNavigatedFromCarPlay) {
+            openProjection()
+            return
+        }
         if (initialLaunch) {
             initialLaunch = false
             startCarHotspotOnLaunch()
@@ -402,6 +420,7 @@ class DiPlayActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        userNavigatedFromCarPlay = false
         cancelKeyLearning()
         pausedForAdbSwitchChange = adbSwitchChangePending
         handler.removeCallbacks(tick)
@@ -3658,7 +3677,7 @@ class DiPlayActivity : ComponentActivity() {
     }
 
     private fun carButtonControls(parent: LinearLayout) {
-        val custom = AirPlayPersistence.loadCustomAirPlayIconFile(this)?.let { BitmapFactory.decodeFile(it.absolutePath) }
+        val custom = AirPlayPersistence.loadCustomAirPlayIconBitmap(this)
         val preview = row().apply { gravity = Gravity.CENTER_VERTICAL }
         preview.addView(ImageView(this).apply {
             setImageBitmap(custom ?: BitmapFactory.decodeResource(resources, R.raw.ic_car_home))
@@ -3708,10 +3727,7 @@ class DiPlayActivity : ComponentActivity() {
                 val bytes = preset.loadBytes(this)
                 if (bytes != null) {
                     AirPlayPersistence.saveCustomAirPlayIcon(this, bytes)
-                    val currentOem = AirPlayPersistence.loadOemLabel(this)
-                    if (currentOem.isBlank() || currentOem == AirPlayPersistence.DEFAULT_OEM_LABEL) {
-                        AirPlayPersistence.saveOemLabel(this, preset.defaultOemName)
-                    }
+                    AirPlayPersistence.saveOemLabel(this, preset.defaultOemName)
                     refreshCarButton()
                     carButtonSaved()
                     toast(getString(R.string.car_brand_icon_applied, preset.displayName(this)))
