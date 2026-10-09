@@ -1851,12 +1851,13 @@ class CarPlayController(
     private fun beginReenumeration(device: UsbDevice) {
         phase = Phase.REENUMERATION
         reenumerationAttempts += 1
+        val generation = availabilityPollGeneration.incrementAndGet()
         connectionDiagnostic("USB transition requested count=$reenumerationAttempts")
         onStatus(CarPlayStatus.SelectingConfiguration)
         iphoneHost.requestCarPlayReenumerationAsync(device, executor) { transition ->
             when (transition) {
                 IphoneUsbHost.TransitionResult.ReenumerationRequested -> {
-                    if (closed || phase != Phase.REENUMERATION) return@requestCarPlayReenumerationAsync
+                    if (closed || phase != Phase.REENUMERATION || generation != availabilityPollGeneration.get()) return@requestCarPlayReenumerationAsync
                     onStatus(CarPlayStatus.WaitingForReenumeration)
                     pollReenumeration(device)
                 }
@@ -1930,6 +1931,7 @@ class CarPlayController(
 
     private fun openDataPaths(device: UsbDevice) {
         phase = Phase.DATAPATHS
+        availabilityPollGeneration.incrementAndGet()
         debugLog("wired opening iPhone USB data paths")
         onStatus(CarPlayStatus.SelectingConfiguration)
         onStatus(CarPlayStatus.OpeningDataPaths)

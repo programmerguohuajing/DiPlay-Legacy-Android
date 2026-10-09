@@ -56,6 +56,17 @@ class IphoneUsbBringupTest {
         assertTrue(messages.any { it.contains("frameworkOk=false") && it.contains("after=6") })
     }
 
+    @Test fun linkageErrorInUsbSessionFailsAsDeviceUnavailable() {
+        val managerState = Shadow.extract<Manager>(manager)
+        managerState.throwLinkageError = true
+        val messages = mutableListOf<String>()
+        val result = open(messages)
+        assertTrue(result is IphoneUsbHost.Iap2SessionResult.Failed)
+        val failure = (result as IphoneUsbHost.Iap2SessionResult.Failed).error
+        assertTrue(failure is IphoneUsbException.DeviceUnavailable)
+        assertTrue(failure.cause is LinkageError)
+    }
+
     private fun open(messages: MutableList<String>): IphoneUsbHost.Iap2SessionResult? {
         var result: IphoneUsbHost.Iap2SessionResult? = null
         IphoneUsbHost(
@@ -78,9 +89,13 @@ class IphoneUsbBringupTest {
 
     @Implements(UsbManager::class)
     class Manager {
+        var throwLinkageError = false
         lateinit var connection: UsbDeviceConnection
         @Implementation fun hasPermission(device: UsbDevice): Boolean = true
-        @Implementation fun openDevice(device: UsbDevice): UsbDeviceConnection = connection
+        @Implementation fun openDevice(device: UsbDevice): UsbDeviceConnection {
+            if (throwLinkageError) throw UnsatisfiedLinkError("dlopen failed: library not found")
+            return connection
+        }
     }
 
     @Implements(UsbDevice::class)

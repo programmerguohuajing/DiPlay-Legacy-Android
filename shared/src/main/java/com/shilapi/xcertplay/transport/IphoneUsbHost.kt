@@ -101,10 +101,14 @@ class IphoneUsbHost(
     internal fun inspectCarPlayConfigurationAsync(device: UsbDevice, executor: Executor,
         callback: (CarPlayUsbConfiguration?) -> Unit) {
         executor.execute {
-            val configuration = runCatching {
-                val connection = usbManager.openDevice(device) ?: return@runCatching null
-                try { IphoneCarPlayConfiguration.find(device, connection) } finally { connection.close() }
-            }.getOrNull()
+            val configuration = try {
+                val connection = usbManager.openDevice(device)
+                if (connection != null) {
+                    try { IphoneCarPlayConfiguration.find(device, connection) } finally { connection.close() }
+                } else null
+            } catch (_: Throwable) {
+                null
+            }
             callback(configuration)
         }
     }
@@ -217,6 +221,10 @@ class IphoneUsbHost(
                 Iap2SessionResult.Failed(
                     IphoneUsbException.PermissionDenied("USB permission was denied", error),
                 )
+            } catch (error: LinkageError) {
+                Iap2SessionResult.Failed(
+                    IphoneUsbException.DeviceUnavailable("Native USB library linkage failed", error),
+                )
             } catch (error: RuntimeException) {
                 Iap2SessionResult.Failed(
                     IphoneUsbException.DeviceUnavailable("iPhone USBMUX operation failed", error),
@@ -256,6 +264,8 @@ class IphoneUsbHost(
         TransitionResult.Failed(error)
     } catch (error: SecurityException) {
         TransitionResult.Failed(IphoneUsbException.PermissionDenied("USB permission was denied", error))
+    } catch (error: LinkageError) {
+        TransitionResult.Failed(IphoneUsbException.DeviceUnavailable("Native USB library linkage failed", error))
     } catch (error: RuntimeException) {
         TransitionResult.Failed(IphoneUsbException.DeviceUnavailable("iPhone USB operation failed", error))
     }
