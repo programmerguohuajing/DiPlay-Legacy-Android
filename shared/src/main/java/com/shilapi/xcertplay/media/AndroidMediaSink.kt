@@ -58,7 +58,17 @@ internal class AudioFocusCoordinator(
     private fun listenerFor(generation: Long) = AudioManager.OnAudioFocusChangeListener { change ->
         synchronized(this) {
             // Android may have queued callbacks before a request was abandoned or replaced.
-            if (generation != focusGeneration || requestedChannel == null || active.isEmpty()) return@synchronized
+            if (generation != focusGeneration || requestedChannel == null || active.isEmpty()) {
+                // Dropping this silently hides the one window that matters: between a telephony
+                // track closing and media reopening, a head unit that keeps focus looks like
+                // nothing at all. Say the callback arrived and why it was not acted on.
+                runCatching {
+                    report("Audio: focus change=$change dropped" +
+                        " stale=${generation != focusGeneration} noRequest=${requestedChannel == null}" +
+                        " activeTracks=${active.size}")
+                }
+                return@synchronized
+            }
             runCatching { report("Audio: focus change=$change activeTracks=${active.size}") }
             when (change) {
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> setMediaVolume(DUCKED_VOLUME)
@@ -542,6 +552,10 @@ class AndroidMediaSink(
             manager.mode = AudioManager.MODE_IN_COMMUNICATION
             communicationModeStream = id
             Log.i("xcertplay-usb", "audio mode $savedAudioMode -> ${manager.mode} for telephony stream=$id")
+            runCatching {
+                onAudioDiagnostic("Audio: mode entered communication from=$savedAudioMode" +
+                    " now=${manager.mode} stream=$id")
+            }
         }
     }
 
@@ -551,12 +565,16 @@ class AndroidMediaSink(
             val active = communicationModeStream ?: return
             if (id != null && id != active) return
             communicationModeStream = null
-            try {
+            val line = try {
                 manager.mode = savedAudioMode
                 Log.i("xcertplay-usb", "audio mode restored to ${manager.mode}")
+                "Audio: mode restored requested=$savedAudioMode now=${manager.mode} stream=$active"
             } catch (error: RuntimeException) {
                 Log.w("xcertplay-usb", "could not restore audio mode $savedAudioMode", error)
+                "Audio: mode restore failed requested=$savedAudioMode now=${manager.mode}" +
+                    " error=${error.javaClass.simpleName}"
             }
+            runCatching { onAudioDiagnostic(line) }
         }
     }
 
