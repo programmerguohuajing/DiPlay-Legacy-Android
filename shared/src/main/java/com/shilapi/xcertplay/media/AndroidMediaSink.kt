@@ -1479,15 +1479,30 @@ private class AudioRenderer(
                     .setBufferSizeInBytes(plan.trackBufferBytes)
                     .build()
             } else {
-                @Suppress("DEPRECATION")
-                AudioTrack(streamType(), format.sampleRate, channelMask, encoding,
-                    plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+                val preferredStream = streamType()
+                LegacyAudioFallback.build(
+                    createLegacy = {
+                        @Suppress("DEPRECATION")
+                        AudioTrack(preferredStream, format.sampleRate, channelMask, encoding,
+                            plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+                    },
+                    isInitialized = { it.state == AudioTrack.STATE_INITIALIZED },
+                    release = { it.release() },
+                    createFallback = {
+                        routeLabel = "usage(fallback=STREAM_MUSIC)"
+                        Log.w(TAG, "streamType=$preferredStream rejected by this ROM; falling back to STREAM_MUSIC")
+                        @Suppress("DEPRECATION")
+                        AudioTrack(AudioManager.STREAM_MUSIC, format.sampleRate, channelMask, encoding,
+                            plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+                    },
+                )
             }
         } else {
             val streamType = streamOverride
             routeLabel = "streamType=$streamType"
             built = LegacyAudioFallback.build(
                 createLegacy = {
+                    @Suppress("DEPRECATION")
                     AudioTrack(streamType, format.sampleRate, channelMask, encoding,
                         plan.trackBufferBytes, AudioTrack.MODE_STREAM)
                 },
@@ -1506,9 +1521,22 @@ private class AudioRenderer(
                             .setBufferSizeInBytes(plan.trackBufferBytes)
                             .build()
                     } else {
-                        @Suppress("DEPRECATION")
-                        AudioTrack(streamType(), format.sampleRate, channelMask, encoding,
-                            plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+                        val fallbackStream = streamType()
+                        LegacyAudioFallback.build(
+                            createLegacy = {
+                                @Suppress("DEPRECATION")
+                                AudioTrack(fallbackStream, format.sampleRate, channelMask, encoding,
+                                    plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+                            },
+                            isInitialized = { it.state == AudioTrack.STATE_INITIALIZED },
+                            release = { it.release() },
+                            createFallback = {
+                                Log.w(TAG, "streamType=$fallbackStream rejected by this ROM; falling back to STREAM_MUSIC")
+                                @Suppress("DEPRECATION")
+                                AudioTrack(AudioManager.STREAM_MUSIC, format.sampleRate, channelMask, encoding,
+                                    plan.trackBufferBytes, AudioTrack.MODE_STREAM)
+                            },
+                        )
                     }
                 },
             )
