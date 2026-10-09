@@ -5112,6 +5112,31 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         controller.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        // On Android 4.4 (KitKat / API 19) and custom head-unit ROMs, WindowInsetsControllerCompat
+        // does not toggle WindowManager.LayoutParams.FLAG_FULLSCREEN or sticky immersive systemUiVisibility flags.
+        if (hideTop) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        }
+        @Suppress("DEPRECATION")
+        var flags = window.decorView.systemUiVisibility
+        if (hideTop) {
+            flags = flags or View.SYSTEM_UI_FLAG_FULLSCREEN
+        } else {
+            flags = flags and View.SYSTEM_UI_FLAG_FULLSCREEN.inv()
+        }
+        if (hideBottom) {
+            flags = flags or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+        } else {
+            flags = flags and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION.inv()
+        }
+        if (hideTop || hideBottom) {
+            flags = flags or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        }
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = flags
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
