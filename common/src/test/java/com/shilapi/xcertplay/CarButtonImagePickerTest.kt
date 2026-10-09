@@ -82,9 +82,16 @@ class CarButtonImagePickerTest {
             cropIntent = it
         })
         val buttons = hostButtons(activity)
-        assertEquals(listOf(activity.getString(R.string.choose_image), activity.getString(R.string.default_icon)),
-            buttons.map { it.text.toString() })
-        buttons.first().performClick()
+        assertEquals(
+            listOf(
+                activity.getString(R.string.preset_brand_icons),
+                activity.getString(R.string.choose_image),
+                activity.getString(R.string.default_icon),
+            ),
+            buttons.map { it.text.toString() },
+        )
+        val choose = buttons.single { it.text == activity.getString(R.string.choose_image) }
+        choose.performClick()
         assertDocumentFilter(documentIntent!!)
         assertTrue(externalActivity(activity))
         val uri = Uri.parse("content://test-images/icon")

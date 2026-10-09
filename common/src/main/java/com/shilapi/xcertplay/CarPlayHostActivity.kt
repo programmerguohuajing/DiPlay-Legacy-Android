@@ -2062,6 +2062,23 @@ class CarPlayHostActivity : ComponentActivity() {
             ).apply { topMargin = dp(12) },
         )
 
+        val restartApplicationButton = Button(this).apply {
+            text = getString(R.string.restart_application)
+            isAllCaps = false
+            textSize = 17f
+            setTextColor(Color.WHITE)
+            ViewCompat.setBackgroundTintList(this, ColorStateList.valueOf(MENU_DANGER))
+            minHeight = dp(52)
+            setOnClickListener { restartApplication() }
+        }
+        content.addView(
+            restartApplicationButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) },
+        )
+
         content.addView(Button(this).apply {
             text = getString(R.string.language_app_language)
             isAllCaps = false
@@ -2622,6 +2639,17 @@ class CarPlayHostActivity : ComponentActivity() {
         }
         actions.addView(
             Button(this).apply {
+                text = getString(R.string.preset_brand_icons)
+                isAllCaps = false
+                setOnClickListener { showCarBrandPresetsDialog() }
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ),
+        )
+        actions.addView(
+            Button(this).apply {
                 text = getString(R.string.choose_image)
                 isAllCaps = false
                 setOnClickListener {
@@ -2642,7 +2670,7 @@ class CarPlayHostActivity : ComponentActivity() {
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
+            ).apply { topMargin = dp(8) },
         )
         actions.addView(
             Button(this).apply {
@@ -2685,6 +2713,32 @@ class CarPlayHostActivity : ComponentActivity() {
         iconStatusView = status
         updateAirPlayIconPreview()
         return section
+    }
+
+    private fun showCarBrandPresetsDialog() {
+        val presets = CarBrandPresets.ALL
+        val items = presets.map { it.displayName(this) }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.car_brand_presets_title))
+            .setItems(items) { _, which ->
+                val preset = presets[which]
+                val bytes = preset.loadBytes(this)
+                if (bytes != null) {
+                    AirPlayPersistence.saveCustomAirPlayIcon(this, bytes)
+                    val currentOem = AirPlayPersistence.loadOemLabel(this)
+                    if (currentOem.isBlank() || currentOem == AirPlayPersistence.DEFAULT_OEM_LABEL) {
+                        AirPlayPersistence.saveOemLabel(this, preset.defaultOemName)
+                    }
+                    updateAirPlayIconPreview()
+                    android.widget.Toast.makeText(
+                        this,
+                        getString(R.string.car_brand_icon_applied, preset.displayName(this)),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
     }
 
     // Between the driver's side and the bottom the dock moves at once (and is saved at once) when the
@@ -4658,6 +4712,28 @@ class CarPlayHostActivity : ComponentActivity() {
             restartCarPlay(if (reconnect) "Settings saved; reconnecting" else "Connection lost while settings were open; reconnecting")
         } else {
             maybeStartCarPlay()
+        }
+    }
+
+    /**
+     * Restarts DiPlay from scratch without killing the process: the session is torn down exactly as
+     * [exitApplication] does, then the launcher activity is started into a cleared task. Because
+     * the process survives, the VPN permission is not requested again.
+     *
+     * The activity is deliberately left running until the relaunch: finishing it first would make
+     * the start a background activity launch, which newer releases refuse.
+     */
+    private fun restartApplication() {
+        if (shuttingDown.get()) return
+        val relaunch = packageManager.getLaunchIntentForPackage(packageName)
+        if (relaunch == null) {
+            exitApplication()
+            return
+        }
+        relaunch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        restoreSettingsBaseline()
+        shutdown(terminateProcess = false, reason = "settings restart application") {
+            applicationContext.startActivity(relaunch)
         }
     }
 

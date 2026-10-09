@@ -738,4 +738,8 @@
     <string name="manual_bluetooth_input_mac_label">Bluetooth MAC Address (e.g. AA:BB:CC:DD:EE:FF):</string>
     <string name="manual_bluetooth_input_name_label">Device Name:</string>
     <string name="manual_bluetooth_input_invalid_mac">Invalid MAC address (format XX:XX:XX:XX:XX:XX)</string>
+    <string name="restart_application">RESTART APPLICATION</string>
+    <string name="preset_brand_icons">Preset brand icons</string>
+    <string name="car_brand_presets_title">Select Car Brand Icon</string>
+    <string name="car_brand_icon_applied">Applied %1$s icon</string>
 </resources>

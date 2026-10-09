@@ -641,4 +641,8 @@
     <string name="manual_bluetooth_input_mac_label">عنوان MAC للبلوتوث (مثال AA:BB:CC:DD:EE:FF):</string>
     <string name="manual_bluetooth_input_name_label">اسم الجهاز:</string>
     <string name="manual_bluetooth_input_invalid_mac">عنوان MAC غير صالح (التنسيق XX:XX:XX:XX:XX:XX)</string>
+    <string name="restart_application">إعادة تشغيل التطبيق</string>
+    <string name="preset_brand_icons">أيقونات الماركات الجاهزة</string>
+    <string name="car_brand_presets_title">اختر أيقونة ماركة السيارة</string>
+    <string name="car_brand_icon_applied">تم تطبيق أيقونة %1$s</string>
 </resources>

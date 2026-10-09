@@ -3,6 +3,7 @@ package com.shilapi.xcertplay.transport
 import android.hardware.usb.UsbConfiguration
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbRequest
 import android.os.Build
@@ -79,3 +80,36 @@ internal fun selectUsbInterface(connection: UsbDeviceConnection, usbInterface: U
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 private fun selectUsbConfiguration21(connection: UsbDeviceConnection, value: Any?): Boolean =
     connection.setConfiguration(value as UsbConfiguration)
+
+/**
+ * Clears a latched halt on [endpoint] after a failed bulk transfer.
+ *
+ * Android reports a stalled endpoint, a NAK and a timeout with the same failed result, and a USB
+ * stall stays latched per endpoint: every later transfer on it fails identically until something
+ * clears the halt. Re-opening the device clears it, which is why a full stack rebuild always
+ * recovers, so clearing it here keeps a single stalled transfer from looking like a dead endpoint.
+ * A control transfer is harmless when the endpoint was never halted.
+ */
+internal fun clearUsbEndpointHalt(
+    connection: UsbDeviceConnection,
+    endpoint: UsbEndpoint,
+    timeoutMillis: Int = USB_HALT_CLEAR_TIMEOUT_MILLIS,
+): Int = try {
+    connection.controlTransfer(
+        UsbConstants.USB_DIR_OUT or UsbConstants.USB_TYPE_STANDARD or USB_RECIP_ENDPOINT,
+        USB_REQUEST_CLEAR_FEATURE,
+        USB_FEATURE_ENDPOINT_HALT,
+        endpoint.address,
+        null,
+        0,
+        timeoutMillis,
+    )
+} catch (_: RuntimeException) {
+    -1
+}
+
+private const val USB_RECIP_ENDPOINT = 0x02
+private const val USB_REQUEST_CLEAR_FEATURE = 1
+private const val USB_FEATURE_ENDPOINT_HALT = 0
+private const val USB_HALT_CLEAR_TIMEOUT_MILLIS = 1_000
+

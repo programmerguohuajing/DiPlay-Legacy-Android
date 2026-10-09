@@ -3671,13 +3671,16 @@ class DiPlayActivity : ComponentActivity() {
         text.addView(label(getString(if (custom != null) R.string.car_button_icon_custom else R.string.default_icon), 14, MUTED).apply { setPadding(0, dp(6), 0, 0) })
         preview.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
         parent.addView(preview)
+        parent.addView(button(getString(R.string.preset_brand_icons), false) {
+            showCarBrandPresetsDialog()
+        }, matchButton(16, 60))
         parent.addView(button(getString(R.string.choose_image), false) {
             launchCarButtonImagePicker(
                 openDocument = { iconDocumentPicker.launch(arrayOf("image/*")) },
                 getContent = { iconPicker.launch("image/*") },
                 documentPickerIsSystem = documentPickerIsSystem(),
             ).onFailure { toast(getString(R.string.this_head_unit_has_no_image_picker)) }
-        }, matchButton(16, 60))
+        }, matchButton(10, 60))
         if (custom != null) parent.addView(button(getString(R.string.default_icon), false) {
             AirPlayPersistence.clearCustomAirPlayIcon(this)
             refreshCarButton()
@@ -3692,6 +3695,29 @@ class DiPlayActivity : ComponentActivity() {
             }
         }, matchButton(10, 60))
         parent.addView(label(getString(R.string.car_button_description), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
+    }
+
+    private fun showCarBrandPresetsDialog() {
+        val presets = CarBrandPresets.ALL
+        val items = presets.map { it.displayName(this) }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.car_brand_presets_title))
+            .setItems(items) { _, which ->
+                val preset = presets[which]
+                val bytes = preset.loadBytes(this)
+                if (bytes != null) {
+                    AirPlayPersistence.saveCustomAirPlayIcon(this, bytes)
+                    val currentOem = AirPlayPersistence.loadOemLabel(this)
+                    if (currentOem.isBlank() || currentOem == AirPlayPersistence.DEFAULT_OEM_LABEL) {
+                        AirPlayPersistence.saveOemLabel(this, preset.defaultOemName)
+                    }
+                    refreshCarButton()
+                    carButtonSaved()
+                    toast(getString(R.string.car_brand_icon_applied, preset.displayName(this)))
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
     }
 
     private fun carButtonSaved() {

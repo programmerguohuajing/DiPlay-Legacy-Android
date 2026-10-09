@@ -701,4 +701,8 @@
     <string name="manual_bluetooth_input_mac_label">蓝牙 MAC 地址（例如 AA:BB:CC:DD:EE:FF）：</string>
     <string name="manual_bluetooth_input_name_label">设备名称：</string>
     <string name="manual_bluetooth_input_invalid_mac">无效的 MAC 地址（格式为 XX:XX:XX:XX:XX:XX）</string>
+    <string name="restart_application">重启应用</string>
+    <string name="preset_brand_icons">选择品牌车标</string>
+    <string name="car_brand_presets_title">选择汽车品牌车标</string>
+    <string name="car_brand_icon_applied">已应用 %1$s 车标</string>
 </resources>

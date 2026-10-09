@@ -641,4 +641,8 @@
     <string name="manual_bluetooth_input_mac_label">Dirección MAC de Bluetooth (ej. AA:BB:CC:DD:EE:FF):</string>
     <string name="manual_bluetooth_input_name_label">Nombre del dispositivo:</string>
     <string name="manual_bluetooth_input_invalid_mac">Dirección MAC no válida (formato XX:XX:XX:XX:XX:XX)</string>
+    <string name="restart_application">REINICIAR APLICACIÓN</string>
+    <string name="preset_brand_icons">Iconos de marcas preestablecidos</string>
+    <string name="car_brand_presets_title">Seleccionar icono de marca de coche</string>
+    <string name="car_brand_icon_applied">Icono de %1$s aplicado</string>
 </resources>
