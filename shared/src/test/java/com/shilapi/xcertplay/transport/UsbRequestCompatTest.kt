@@ -29,7 +29,10 @@ class UsbRequestCompatTest {
                     buffer.position(shadow.length)
                 }
             }
-        } finally { compat.close(); request.close() }
+        } finally {
+            compat.close()
+            request.close()
+        }
     }
 
     @Implements(UsbRequest::class)

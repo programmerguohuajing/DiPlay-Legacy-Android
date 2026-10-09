@@ -536,6 +536,13 @@ class Iap2UsbSession internal constructor(
     }
 
     private fun drainCancelledRead(request: UsbRequest) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // Below Android 8 (API 26), request.cancel() often returns false or is not supported
+            // by legacy Linux usbfs drivers (e.g. Allwinner T3 Android 4.4 / 7.1).
+            // Do not fail the session if cancel() fails.
+            runCatching { request.cancel() }
+            return
+        }
         if (!request.cancel()) {
             throw failSession("Android could not cancel timed out USBMUX read request")
         }

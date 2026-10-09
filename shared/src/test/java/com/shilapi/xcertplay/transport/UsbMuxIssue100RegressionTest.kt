@@ -171,6 +171,36 @@ class UsbMuxIssue100RegressionTest {
         } finally { host.close() }
     }
 
+    @Test
+    @Config(sdk = [25])
+    fun readTimeoutBelowApi26IgnoresFailedCancel() {
+        UsbEvidenceReplay.cancelReturns = false
+        val pipe = pipe()
+        try {
+            val result = pipe.read(10)
+            assertEquals(null, result)
+        } finally {
+            pipe.close()
+        }
+    }
+
+    @Test
+    @Config(sdk = [26])
+    fun readTimeoutAboveApi26ThrowsWhenCancelFails() {
+        UsbEvidenceReplay.cancelReturns = false
+        val pipe = pipe()
+        try {
+            try {
+                pipe.read(10)
+                org.junit.Assert.fail("Expected IphoneUsbException.DeviceUnavailable")
+            } catch (error: IphoneUsbException.DeviceUnavailable) {
+                assertTrue(error.message?.contains("Android could not cancel timed out USBMUX read request") == true)
+            }
+        } finally {
+            pipe.close()
+        }
+    }
+
     private fun host(): Iap2UsbMuxHost {
         return Iap2UsbMuxHost::class.java.getDeclaredConstructor(
             Iap2UsbSession::class.java, Long::class.javaPrimitiveType,
@@ -233,11 +263,12 @@ object UsbEvidenceReplay {
     var request: UsbRequest? = null
     var buffer: ByteBuffer? = null
     var cancelled = false
+    var cancelReturns = true
     var completedReads = 0
     var timedOutReads = 0
     fun reset() {
         transfers.clear(); writes.clear()
-        request = null; buffer = null; cancelled = false; completedReads = 0; timedOutReads = 0
+        request = null; buffer = null; cancelled = false; cancelReturns = true; completedReads = 0; timedOutReads = 0
     }
 }
 
@@ -265,6 +296,17 @@ class EvidenceUsbConnectionShadow {
         UsbEvidenceReplay.completedReads++
         return UsbEvidenceReplay.request!!
     }
+    @Implementation fun requestWait(): UsbRequest? {
+        if (UsbEvidenceReplay.cancelled) return UsbEvidenceReplay.request
+        val bytes = UsbEvidenceReplay.transfers.pollFirst() ?: run {
+            Thread.sleep(50)
+            UsbEvidenceReplay.timedOutReads++
+            return null
+        }
+        UsbEvidenceReplay.buffer!!.put(bytes)
+        UsbEvidenceReplay.completedReads++
+        return UsbEvidenceReplay.request
+    }
     @Implementation fun close() = Unit
 }
 
@@ -278,6 +320,10 @@ class EvidenceUsbRequestShadow {
         UsbEvidenceReplay.cancelled = false
         return true
     }
-    @Implementation fun cancel(): Boolean { UsbEvidenceReplay.cancelled = true; return true }
+    @Implementation fun queue(buffer: ByteBuffer, length: Int): Boolean = queue(buffer)
+    @Implementation fun cancel(): Boolean {
+        UsbEvidenceReplay.cancelled = true
+        return UsbEvidenceReplay.cancelReturns
+    }
     @Implementation fun close() = Unit
 }
