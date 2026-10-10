@@ -42,6 +42,7 @@ dependencies {
     coreLibraryDesugaring libs.desugar.jdk.libs
     implementation 'androidx.annotation:annotation:1.7.1'
     implementation libs.bouncycastle
+    api 'org.conscrypt:conscrypt-android:2.5.2'
     implementation libs.jmdns
     testImplementation libs.junit
     testImplementation 'org.robolectric:robolectric:4.17'

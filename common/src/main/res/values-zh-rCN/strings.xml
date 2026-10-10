@@ -713,4 +713,9 @@
     <string name="settings_car_bluetooth_mac_dialog_message">输入车机真实蓝牙 MAC 地址（例如 AA:BB:CC:DD:EE:FF）。可在 iPhone「设置 → 蓝牙 → (i)」或车机蓝牙设置中查看。</string>
     <string name="settings_car_bluetooth_mac_clear">清除 / 自动探测</string>
     <string name="settings_car_bluetooth_mac_invalid">请输入有效的 12 位十六进制 MAC 地址。</string>
+    <string name="report_no_usb_drive">未检测到可写入的U盘。请连接U盘后重试，或将报告保存到车机。</string>
+    <string name="report_auto_save_locations">自动保存至所有可写位置</string>
+    <string name="report_usb_location">U盘：%1$s</string>
+    <string name="report_usb_copy_unavailable">U盘副本：未找到可写U盘</string>
+    <string name="report_usb_copy_paths">另外保存到：\n%1$s</string>
 </resources>

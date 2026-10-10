@@ -59,6 +59,23 @@ class DiagnosticExportFallbackTest {
         assertEquals("report", read(saved.uri))
     }
 
+    @Test fun selectedWritableUsbVolumeReceivesTheSameUtf8Report() {
+        val usb = File(context.cacheDir, "usb-volume").apply { mkdirs() }
+        val content = "DiPlay USB report\nAPI=19\n"
+        val saved = DiagnosticExportStore.saveWithoutPicker(context, "DiPlay-test-usb.txt", content, usb)
+        val copy = File(usb, "DiPlay/DiPlay-test-usb.txt")
+        assertTrue(copy.isFile)
+        assertEquals(content, copy.readText(Charsets.UTF_8))
+        assertTrue(saved.copyPaths.contains(copy.absolutePath))
+        assertEquals(content, read(saved.uri))
+    }
+
+    @Test fun unavailableSelectedUsbVolumeDoesNotClaimSuccess() {
+        val blocked = File(context.cacheDir, "not-a-directory").apply { writeText("block") }
+        val saved = DiagnosticExportStore.saveWithoutPicker(context, "DiPlay-test-usb.txt", "report", blocked)
+        assertFalse(saved.copyPaths.any { it.startsWith(blocked.absolutePath) })
+        assertEquals("report", read(saved.uri))
+    }
     @Test fun anEarlierShareUriCannotReadALaterExport() {
         val first = DiagnosticExportStore.saveWithoutPicker(context, "DiPlay-test.txt", "first")
         val second = DiagnosticExportStore.saveWithoutPicker(context, "DiPlay-test.txt", "second")

@@ -750,4 +750,9 @@
     <string name="settings_car_bluetooth_mac_dialog_message">Enter the car’s native Bluetooth MAC address (e.g. AA:BB:CC:DD:EE:FF). Find it in iPhone Settings → Bluetooth → (i) or your car’s Bluetooth settings.</string>
     <string name="settings_car_bluetooth_mac_clear">Auto / Clear</string>
     <string name="settings_car_bluetooth_mac_invalid">Please enter a valid 12-digit hexadecimal MAC address.</string>
+    <string name="report_no_usb_drive">No writable USB drive detected. Connect a USB drive and retry, or save the report on this device.</string>
+    <string name="report_auto_save_locations">Automatically save to writable locations</string>
+    <string name="report_usb_location">USB: %1$s</string>
+    <string name="report_usb_copy_unavailable">USB copy: no writable drive found</string>
+    <string name="report_usb_copy_paths">Additional copies:\n%1$s</string>
 </resources>

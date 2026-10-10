@@ -18,10 +18,11 @@ internal object DiagnosticExportStore {
         val uri: Uri,
         val savedInApp: Boolean = false,
         val savedPath: String? = null,
+        val copyPaths: List<String> = emptyList(),
     )
 
     /** Android 9 and OEMs without working Downloads storage can still export privately. */
-    fun saveWithoutPicker(context: Context, fileName: String, report: String): SavedReport {
+    fun saveWithoutPicker(context: Context, fileName: String, report: String, preferredRoot: File? = null): SavedReport {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 return SavedReport(saveToDownloads(context.contentResolver, fileName, report))
@@ -42,58 +43,78 @@ internal object DiagnosticExportStore {
             // A missing, read-only or full external volume must not prevent export.
             saveInDirectory(context, File(context.filesDir, "diagnostic-reports"), fileName, report, savedInApp = true)
         }
-        exportCopiesToAccessibleStorage(context, fileName, report)
-        return saved
+        val copyPaths = exportCopiesToAccessibleStorage(context, fileName, report, preferredRoot)
+        return saved.copy(copyPaths = copyPaths)
     }
 
-    private fun exportCopiesToAccessibleStorage(context: Context, fileName: String, report: String) {
+    /** Exposes writable USB-like volumes to the in-app KitKat destination picker. */
+    fun availableUsbVolumes(context: Context): List<File> {
+        val candidates = linkedSetOf<File>()
         runCatching {
-            val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val downloadDiPlay = File(downloadDir, "DiPlay")
-            if (downloadDiPlay.isDirectory || downloadDiPlay.mkdirs()) {
-                File(downloadDiPlay, fileName).writeText(report, Charsets.UTF_8)
-            }
+            context.getExternalFilesDirs(null)?.drop(1)?.filterNotNull()?.forEach { candidates.add(it) }
         }
-        runCatching {
-            val sdcard = Environment.getExternalStorageDirectory()
-            val sdcardDiPlay = File(sdcard, "DiPlay")
-            if (sdcardDiPlay.isDirectory || sdcardDiPlay.mkdirs()) {
-                File(sdcardDiPlay, fileName).writeText(report, Charsets.UTF_8)
-            }
-        }
-        runCatching {
-            val allExternal = context.getExternalFilesDirs(null)
-            if (allExternal != null && allExternal.size > 1) {
-                for (i in 1 until allExternal.size) {
-                    val vol = allExternal[i] ?: continue
-                    val targetDir = File(vol, "diagnostic-reports")
-                    if (targetDir.isDirectory || targetDir.mkdirs()) {
-                        File(targetDir, fileName).writeText(report, Charsets.UTF_8)
+        val usbName = Regex("(?i).*(usb|udisk|usbotg|otg|removable|external_usb).*")
+        for (base in listOf("/storage", "/mnt", "/mnt/media_rw")) {
+            for (child in File(base).listFiles().orEmpty()) {
+                if (!child.isDirectory) continue
+                if (usbName.matches(child.name)) candidates.add(child)
+                for (sub in child.listFiles().orEmpty()) {
+                    if (sub.isDirectory && (usbName.matches(child.name) || usbName.matches(sub.name))) {
+                        candidates.add(sub)
                     }
                 }
             }
         }
+        return candidates.filter { it.isDirectory && it.canWrite() }.distinctBy {
+            runCatching { it.canonicalPath }.getOrDefault(it.absolutePath)
+        }
+    }
+    /** Best-effort verified copies: report success only for a write that actually completed. */
+    private fun exportCopiesToAccessibleStorage(context: Context, fileName: String, report: String, preferredRoot: File?): List<String> {
+        val written = linkedSetOf<String>()
+        val roots = linkedSetOf<File>()
+        if (preferredRoot != null) roots.add(preferredRoot)
+        runCatching { roots.add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) }
+        runCatching { roots.add(Environment.getExternalStorageDirectory()) }
         runCatching {
-            val knownUsbMounts = listOf(
-                "/mnt/usb_storage",
-                "/mnt/udisk",
-                "/mnt/usb",
-                "/storage/usbotg",
-                "/storage/udisk",
-                "/mnt/media_rw"
-            )
-            for (path in knownUsbMounts) {
-                val dir = File(path)
-                if (dir.exists() && dir.isDirectory && dir.canWrite()) {
-                    val diPlayDir = File(dir, "DiPlay")
-                    if (diPlayDir.isDirectory || diPlayDir.mkdirs()) {
-                        File(diPlayDir, fileName).writeText(report, Charsets.UTF_8)
+            context.getExternalFilesDirs(null)?.drop(1)?.filterNotNull()?.forEach { roots.add(it) }
+        }
+        // Android 4.4 factory ROMs frequently mount USB media under vendor-named directories.
+        // Only inspect immediate children and one additional level, never traverse arbitrary trees.
+        val basePaths = listOf("/storage", "/mnt", "/mnt/media_rw")
+        val usbNames = Regex("(?i).*(usb|udisk|usbotg|otg|removable|external_usb).*")
+        for (base in basePaths) {
+            val dir = File(base)
+            for (child in dir.listFiles().orEmpty()) {
+                if (!child.isDirectory) continue
+                if (usbNames.matches(child.name)) roots.add(child)
+                for (sub in child.listFiles().orEmpty()) {
+                    if (sub.isDirectory && (usbNames.matches(child.name) || usbNames.matches(sub.name))) {
+                        roots.add(sub)
                     }
                 }
             }
         }
+        for (root in roots) {
+            runCatching {
+                if (!root.isDirectory || !root.canWrite()) return@runCatching
+                val canonicalRoot = root.canonicalFile
+                val dir = File(canonicalRoot, "DiPlay")
+                if (!dir.isDirectory && !dir.mkdirs()) return@runCatching
+                val destination = File(dir, fileName)
+                // Do not overwrite an existing report or follow an unexpected symlink.
+                if (destination.exists()) return@runCatching
+                val bytes = report.toByteArray(Charsets.UTF_8)
+                destination.outputStream().use { it.write(bytes); it.flush() }
+                if (destination.length() != bytes.size.toLong()) {
+                    destination.delete()
+                    return@runCatching
+                }
+                written.add(destination.absolutePath)
+            }
+        }
+        return written.toList()
     }
-
     private fun saveInDirectory(
         context: Context,
         directory: File,

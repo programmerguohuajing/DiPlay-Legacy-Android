@@ -12,6 +12,7 @@ import java.security.cert.X509Certificate
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Base64
 import javax.net.ssl.KeyManagerFactory
+import org.conscrypt.Conscrypt
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLEngine
 import javax.net.ssl.X509TrustManager
@@ -47,7 +48,16 @@ object LockdownTlsEngineFactory {
             // Some Android 4.4/5.1 vendor providers expose only TLSv1 through the generic
             // "TLS" SSLContext alias, while the version-specific factory supports TLSv1.2.
             // Never downgrade Lockdown to TLSv1.0/1.1.
-            val context = sequenceOf("TLSv1.2", "TLS")
+// Bundled Conscrypt supplies real TLS 1.2 on API 19 vendor ROMs whose
+            // AndroidOpenSSL alias may report TLSv1.2 but expose only TLSv1/SSLv3.
+            val bundled = runCatching {
+                SSLContext.getInstance("TLS", Conscrypt.newProvider()).apply {
+                    init(keyManagers, arrayOf(UsbLockdownTrustManager), null)
+                }
+            }.getOrNull()?.takeIf { candidate ->
+                candidate.createSSLEngine().supportedProtocols.contains("TLSv1.2")
+            }
+            val context = bundled ?: sequenceOf("TLSv1.2", "TLS")
                 .mapNotNull { protocol ->
                     runCatching {
                         SSLContext.getInstance(protocol).apply {

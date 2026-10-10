@@ -272,6 +272,7 @@ class DiPlayActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) LegacyConnectionProbe.log(applicationContext)
         // Back on the home page finishes this activity while the session runs on, so the icon lands here.
         if (savedInstanceState == null && isLauncherIntent(intent) && CarPlayBackgroundSession.hasSession()) {
             openProjection(); finish(); return
@@ -1271,8 +1272,7 @@ class DiPlayActivity : ComponentActivity() {
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) exportDiagnostics()
-                else chooseReportDestination()
+                exportDiagnostics()
             }.apply { isEnabled = !exportInProgress }
             card.addView(exportButton, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
@@ -4161,10 +4161,30 @@ class DiPlayActivity : ComponentActivity() {
 
     private fun reportFileName() = "DiPlay-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
 
+    private var preferredReportRoot: File? = null
+
     private fun chooseReportDestination() {
         // Some head units omit or disable DocumentsUI. Launch itself can throw, before
         // the result callback and the background writer's exception handler ever run.
         if (exportInProgress) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            // Use our own USB volume picker: KitKat DocumentsUI often hides vendor mounts.
+            val choices = DiagnosticExportStore.availableUsbVolumes(applicationContext)
+            if (choices.isEmpty()) {
+                AlertDialog.Builder(this).setMessage(getString(R.string.report_no_usb_drive))
+                    .setPositiveButton(getString(R.string.save_diagnostic_report)) { _, _ -> exportDiagnostics() }
+                    .setNegativeButton(getString(R.string.done), null).show()
+            } else {
+                val labels = arrayOf(getString(R.string.report_auto_save_locations)) +
+                    choices.map { getString(R.string.report_usb_location, it.absolutePath) }
+                AlertDialog.Builder(this).setTitle(getString(R.string.choose_save_location))
+                    .setItems(labels) { _, selected ->
+                        preferredReportRoot = choices.getOrNull(selected - 1)
+                        exportDiagnostics()
+                    }.setNegativeButton(getString(R.string.done), null).show()
+            }
+            return
+        }
         runCatching { export.launch(reportFileName()) }.onFailure { exportDiagnostics() }
     }
 
@@ -4174,12 +4194,16 @@ class DiPlayActivity : ComponentActivity() {
         exportButton?.apply { isEnabled = false; text = getString(R.string.saving_report) }
         val appContext = applicationContext
         val fileName = reportFileName()
+        val requestedRoot = preferredReportRoot
+        preferredReportRoot = null
         Thread({
             val result = runCatching {
                 val report = buildString {
                     appendLine("DiPlay ${version()} · private beta diagnostic report")
                     appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}")
                     appendLine("Head unit: ${Build.MANUFACTURER} ${Build.MODEL}")
+                    appendLine("--- Legacy USB / wireless / TLS provider diagnostics ---")
+                    append(LegacyConnectionProbe.report(appContext))
                     appendLine("Connection: ${if (AirPlayPersistence.loadWirelessEnabled(appContext)) "wireless" else "USB"}")
                     appendLine("Authentication: local experimental beta identity; no remote fallback")
                     appendLine("CarPlay setup: ${if (setupError == null) "ready" else "authentication unavailable"}")
@@ -4249,7 +4273,7 @@ class DiPlayActivity : ComponentActivity() {
                 val savedReport = if (uri != null) {
                     DiagnosticExportStore.write(appContext.contentResolver, uri, report)
                     DiagnosticExportStore.SavedReport(uri)
-                } else DiagnosticExportStore.saveWithoutPicker(appContext, fileName, report)
+                } else DiagnosticExportStore.saveWithoutPicker(appContext, fileName, report, requestedRoot)
                 savedReport to report
             }
             runOnUiThread {
@@ -4261,7 +4285,8 @@ class DiPlayActivity : ComponentActivity() {
                     AlertDialog.Builder(this).setTitle(getString(R.string.diagnostic_report_saved))
                         .setMessage(when {
                             savedReport.savedInApp -> getString(R.string.diagnostic_report_saved_in_app)
-                            savedReport.savedPath != null -> getString(R.string.diagnostic_report_saved_to_path, savedReport.savedPath)
+                            savedReport.savedPath != null -> getString(R.string.diagnostic_report_saved_to_path, savedReport.savedPath) +
+                                if (savedReport.copyPaths.isEmpty()) "\n" + getString(R.string.report_usb_copy_unavailable) else "\n" + getString(R.string.report_usb_copy_paths, savedReport.copyPaths.joinToString("\n"))
                             uri == null -> "Downloads/DiPlay/$fileName"
                             else -> getString(R.string.your_report_was_saved_to_the_selected_location)
                         })
