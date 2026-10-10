@@ -17,10 +17,17 @@ jobs:
   verify-release-signature:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Android build tools
-        uses: android-actions/setup-android@v3
-      - name: Install APK signer
-        run: sdkmanager "build-tools;35.0.0"
+      - name: Ensure Android APK signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          # ubuntu-latest already ships the Android SDK. The setup-android@v3
+          # action still requests the removed "tools" SDK package and fails
+          # before the release certificate can be verified.
+          if [[ ! -x "$ANDROID_HOME/build-tools/35.0.0/apksigner" ]]; then
+            sdkmanager "build-tools;35.0.0"
+          fi
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
       - name: Download release APK
         env:
           GH_TOKEN: ${{ github.token }}
