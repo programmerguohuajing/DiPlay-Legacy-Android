@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_section">Software updates</string>
+    <string name="update_auto_check">Automatically check for updates</string>
+    <string name="update_auto_description">Check GitHub Releases at most once a day when DiPlay opens. No automatic installation.</string>
+    <string name="update_check_now">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_up_to_date">You are using the latest version.</string>
+    <string name="update_available">DiPlay %1$s is available</string>
+    <string name="update_no_notes">No release notes are available.</string>
+    <string name="update_parked_notice">Park safely and disconnect CarPlay before installing. Android will ask you to confirm installation.</string>
+    <string name="update_download">Download update</string>
+    <string name="update_downloading">Downloading and verifying APK…</string>
+    <string name="update_install_title">Install DiPlay %1$s</string>
+    <string name="update_install_notice">The downloaded APK has passed SHA-256, package-name and signing-certificate verification. Open the Android installer now?</string>
+    <string name="update_install">Open installer</string>
+    <string name="update_permission_title">Allow installing updates</string>
+    <string name="update_permission_message">Android requires you to authorize DiPlay to install APKs. Enable this permission in system settings, then return to DiPlay.</string>
+    <string name="update_open_settings">Open system settings</string>
+    <string name="update_disconnect_first">Disconnect CarPlay and park safely before downloading or installing an update.</string>
+    <string name="update_install_unavailable">The system installer is unavailable on this device.</string>
+    <string name="update_failed">Update failed</string>
+</resources>

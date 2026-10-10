@@ -125,6 +125,12 @@ internal object SettingsInformationArchitecture {
 /** DiAuto's visual language, with a connection flow for an independent CarPlay receiver. */
 class DiPlayActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
+    private val automaticUpdateCheck = Runnable {
+        if (!isFinishing && !isDestroyed) updater.checkAutomatically()
+    }
+    private val updaterDelegate = lazy { DiPlayUpdater(this) }
+    private val updater by updaterDelegate
+    private fun lazyUpdaterInitialized() = updaterDelegate.isInitialized()
     private var windowLearning: WindowKeyLearning? = null
     private val windowLearningPresses = WheelKeyPresses()
     private val endWindowLearning = Runnable { cancelKeyLearning() }
@@ -309,6 +315,7 @@ class DiPlayActivity : ComponentActivity() {
             ?.let { runCatching { SettingsCategory.valueOf(it) }.getOrNull() }
         page = savedInstanceState?.getString("page") ?: intent.getStringExtra("page") ?: "home"
         render()
+        handler.postDelayed(automaticUpdateCheck, 4000L)
         scheduleAutomaticVehicleValidation()
         handleWirelessRecovery()
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -405,6 +412,7 @@ class DiPlayActivity : ComponentActivity() {
             return
         }
         handler.removeCallbacks(tick); handler.post(tick)
+        updater.onResume()
         // Back from the car settings: refresh the car hotspot reminder on the home page.
         if (!initialLaunch && !adbSwitchChangePending && !pausedForAdbSwitchChange &&
             (page == "home" || page == "settings" || page == "connection")) render()
@@ -431,6 +439,8 @@ class DiPlayActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(automaticUpdateCheck)
+        if (lazyUpdaterInitialized()) updater.close()
         hotspotJoinControls?.close()
         cancelUsbPermissionSetup()
         cancelKeyLearning()
@@ -1708,6 +1718,7 @@ class DiPlayActivity : ComponentActivity() {
         filteredSection(content, SettingsSection.ABOUT,
             getString(R.string.about), R.drawable.ic_dp_about) { card ->
             card.addView(button(getString(R.string.about_diplay), false) { page = "about"; render() }, matchButton(0, 60))
+            card.addView(button(getString(R.string.update_check_now), false) { updater.check(manual = true) }, matchButton(10, 60))
         }
         languageSettings(content)
     }
@@ -1717,6 +1728,15 @@ class DiPlayActivity : ComponentActivity() {
         content.addView(label(getString(R.string.carplay_at_home_in_your_car), 20, MUTED).apply { setPadding(0, dp(8), 0, dp(24)) })
         section(content, "${getString(R.string.about_public_preview_prefix)}${version()}") { card ->
             card.addView(label(getString(R.string.an_independent_carplay_receiver_for_android_head_units_wir), 17, TEXT))
+        }
+        section(content, getString(R.string.update_section)) { card ->
+            toggle(card, getString(R.string.update_auto_check),
+                getString(R.string.update_auto_description), updater.autoEnabled()) {
+                updater.setAutoEnabled(it)
+            }
+            card.addView(button(getString(R.string.update_check_now), false) {
+                updater.check(manual = true)
+            }, matchButton(10, 60))
         }
         section(content, getString(R.string.made_possible_by_open_source)) { card ->
             card.addView(label(getString(R.string.receiver_based_on_xcertplay_licensed_under_gpl_3_0_diplay), 16, MUTED))

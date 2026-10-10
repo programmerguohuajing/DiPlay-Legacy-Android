@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_section">软件更新</string>
+    <string name="update_auto_check">自动检查更新</string>
+    <string name="update_auto_description">DiPlay 启动后最多每天检查一次 GitHub Release；不会静默安装。</string>
+    <string name="update_check_now">检查软件更新</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_up_to_date">当前已经是最新版本。</string>
+    <string name="update_available">发现 DiPlay 新版本 %1$s</string>
+    <string name="update_no_notes">当前版本没有更新说明。</string>
+    <string name="update_parked_notice">请停车并断开 CarPlay 后安装，Android 系统会要求您确认安装。</string>
+    <string name="update_download">下载更新</string>
+    <string name="update_downloading">正在下载并验证 APK…</string>
+    <string name="update_install_title">安装 DiPlay %1$s</string>
+    <string name="update_install_notice">APK 已通过 SHA-256、包名与应用签名校验。是否打开 Android 系统安装程序？</string>
+    <string name="update_install">打开安装程序</string>
+    <string name="update_permission_title">允许安装应用更新</string>
+    <string name="update_permission_message">Android 需要授权 DiPlay 安装 APK。请在系统设置中允许，再返回 DiPlay。</string>
+    <string name="update_open_settings">打开系统设置</string>
+    <string name="update_disconnect_first">请停车并断开 CarPlay 后再下载或安装软件更新。</string>
+    <string name="update_install_unavailable">当前车机无法打开系统 APK 安装程序。</string>
+    <string name="update_failed">更新失败</string>
+</resources>
