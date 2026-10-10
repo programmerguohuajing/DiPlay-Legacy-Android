@@ -2221,7 +2221,12 @@ class CarPlayController(
                 locationProvider = locationProvider,
                 vehicleStatusProvider = vehicleStatusProvider,
                 onIncoming = ::onRouteFrame,
-                onProgress = { message -> debugLog("wired $message") },
+                onProgress = { message ->
+                    debugLog("wired $message")
+                    if (message.contains("carplay-start-session")) {
+                        vpnService?.sendUnsolicitedNeighborAdvertisement(force = true)
+                    }
+                },
             )
             onStatus(
                 when (result.terminal) {

@@ -92,6 +92,12 @@ class CarPlayVpnScopeTest {
         }
     }
 
+    @Test fun sendUnsolicitedNeighborAdvertisementIsSafeWhenNotAttached() {
+        withService { service ->
+            service.sendUnsolicitedNeighborAdvertisement(force = true)
+        }
+    }
+
     private fun withService(check: (CarPlayVpnService) -> Unit) {
         val controller = Robolectric.buildService(CarPlayVpnService::class.java).create()
         try { check(controller.get()) } finally { controller.destroy() }

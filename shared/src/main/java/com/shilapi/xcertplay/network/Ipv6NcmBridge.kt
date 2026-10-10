@@ -39,6 +39,8 @@ class Ipv6NcmBridge(
     private var loggedWaitingForPeer = false
     private var inboundLogBudget = 16
     private var outboundLogBudget = 24
+    @Volatile
+    private var lastNaTimeNanos = 0L
     private val running = AtomicBoolean(false)
     private lateinit var ncmToTunThread: Thread
     private lateinit var tunToNcmThread: Thread
@@ -50,7 +52,7 @@ class Ipv6NcmBridge(
         // Without this, our unicast NA reply is silently dropped while peerMac is still null,
         // causing a deadlock: iPhone never learns fe80::2's MAC, never connects AirPlay TCP,
         // and the USB read queue times out with "FAILED: Android could not queue USBMUX read request".
-        sendUnsolicitedNeighborAdvertisement()
+        sendUnsolicitedNeighborAdvertisement(force = true)
         ncmToTunThread = Thread(::runNcmToTun, "ncm-ipv6-in").apply {
             isDaemon = true
             start()
@@ -73,7 +75,13 @@ class Ipv6NcmBridge(
         val output = FileOutputStream(tun.fileDescriptor)
         try {
             while (running.get()) {
-                val frame = ncm.recv(READ_TIMEOUT_MILLIS) ?: continue
+                val frame = ncm.recv(READ_TIMEOUT_MILLIS)
+                if (frame == null) {
+                    if (peerMac == null) {
+                        sendUnsolicitedNeighborAdvertisement()
+                    }
+                    continue
+                }
                 val ipv6 = EthernetIpv6Codec.parseIpv6View(frame) ?: continue
                 peerMac = ipv6.sourceMac
                 if (!loggedInbound) {
@@ -125,6 +133,7 @@ class Ipv6NcmBridge(
                 val multicastMac = EthernetIpv6Codec.multicastDestinationMac(ipv6)
                 val mac = multicastMac ?: peerMac
                 if (mac == null) {
+                    sendUnsolicitedNeighborAdvertisement()
                     if (!loggedWaitingForPeer) {
                         loggedWaitingForPeer = true
                         Log.i(TAG, "ncm deferred outbound unicast bytes=$length until peer MAC is learned")
@@ -160,7 +169,13 @@ class Ipv6NcmBridge(
      *   Target address (16 bytes)
      *   Option: Target Link-Layer Address (type=2, len=1, MAC: 6 bytes → 8 bytes total)
      */
-    private fun sendUnsolicitedNeighborAdvertisement() {
+    fun sendUnsolicitedNeighborAdvertisement(force: Boolean = false) {
+        if (!running.get()) return
+        val now = System.nanoTime()
+        synchronized(this) {
+            if (!force && now - lastNaTimeNanos < NA_RETRY_INTERVAL_NANOS) return
+            lastNaTimeNanos = now
+        }
         try {
             val src = InetAddress.getByName(hostLinkLocal).address
             // Destination: all-nodes multicast ff02::1
@@ -263,5 +278,6 @@ class Ipv6NcmBridge(
         const val TUN_READ_BYTES = 4_096
         const val ZERO_READ_BACKOFF_NANOS = 1_000_000L
         const val JOIN_TIMEOUT_MILLIS = 2_000L
+        const val NA_RETRY_INTERVAL_NANOS = 500_000_000L
     }
 }

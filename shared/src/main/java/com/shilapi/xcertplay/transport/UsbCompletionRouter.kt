@@ -9,37 +9,59 @@ import kotlin.concurrent.withLock
 
 /** requestWait is connection-wide, even when readers use different USB interfaces. */
 internal class UsbCompletionRouter<T : Any>(private val poll: (Long) -> T?) {
-    private val lock = ReentrantLock(true)
+    private val lock = ReentrantLock()
+    private val condition = lock.newCondition()
     private val requests = IdentityHashMap<T, Boolean>()
+    private var poller: Thread? = null
 
-    fun register(request: T) = lock.withLock { requests[request] = false }
-    fun forget(request: T) = lock.withLock { requests.remove(request); Unit }
+    fun register(request: T) = lock.withLock {
+        requests[request] = false
+    }
+
+    fun forget(request: T) = lock.withLock {
+        requests.remove(request)
+        condition.signalAll()
+    }
 
     fun await(request: T, timeoutMillis: Long): T {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis.coerceAtLeast(1))
-        while (true) {
-            val remaining = deadline - System.nanoTime()
-            if (remaining <= 0) throw TimeoutException("USB request completion timed out")
-            try {
-                if (!lock.tryLock(remaining, TimeUnit.NANOSECONDS)) {
-                    throw TimeoutException("USB completion dispatcher is busy")
-                }
-            } catch (interrupted: InterruptedException) {
-                Thread.currentThread().interrupt()
-                throw IOException("USB completion wait interrupted", interrupted)
-            }
-            try {
+        lock.withLock {
+            while (true) {
                 if (!requests.containsKey(request)) throw IOException("USB request was closed")
                 if (requests[request] == true) {
                     requests.remove(request)
                     return request
                 }
-                val pollMillis = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()).coerceIn(1, 50)
-                val completed = try { poll(pollMillis) } catch (_: TimeoutException) { continue }
-                    ?: throw IOException("USB connection returned no completed request")
-                if (requests.containsKey(completed)) requests[completed] = true
-            } finally {
-                lock.unlock()
+                val remainingNanos = deadline - System.nanoTime()
+                if (remainingNanos <= 0) throw TimeoutException("USB request completion timed out")
+
+                if (poller == null) {
+                    poller = Thread.currentThread()
+                    val pollMillis = TimeUnit.NANOSECONDS.toMillis(remainingNanos).coerceIn(1, 50)
+                    val completed = try {
+                        lock.unlock()
+                        try {
+                            poll(pollMillis)
+                        } catch (_: TimeoutException) {
+                            null
+                        }
+                    } finally {
+                        lock.lock()
+                        poller = null
+                        condition.signalAll()
+                    }
+                    if (completed != null && requests.containsKey(completed)) {
+                        requests[completed] = true
+                        condition.signalAll()
+                    }
+                } else {
+                    try {
+                        condition.await(remainingNanos, TimeUnit.NANOSECONDS)
+                    } catch (interrupted: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw IOException("USB completion wait interrupted", interrupted)
+                    }
+                }
             }
         }
     }

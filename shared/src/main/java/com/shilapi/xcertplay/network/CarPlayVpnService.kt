@@ -62,7 +62,7 @@ class CarPlayVpnService : VpnService() {
     @Volatile private var attachment: AirPlayAttachment? = null
     private var serverSocket: ServerSocket? = null
     private var additionalServers: List<ServerSocket> = emptyList()
-    private var bridge: Ipv6NcmBridge? = null
+    @Volatile private var bridge: Ipv6NcmBridge? = null
     private var tun: ParcelFileDescriptor? = null
     private var attachGeneration = 0
     @Volatile var lastAttachFailure: String? = null
@@ -186,6 +186,10 @@ class CarPlayVpnService : VpnService() {
     }
 
     fun isAttached(): Boolean = active.get() && attachment != null
+
+    fun sendUnsolicitedNeighborAdvertisement(force: Boolean = false) {
+        bridge?.sendUnsolicitedNeighborAdvertisement(force)
+    }
 
     /** Port the AirPlay listener actually bound, which may differ from the configured port. */
     fun boundPort(): Int? = attachment?.config?.port
