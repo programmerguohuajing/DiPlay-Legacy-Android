@@ -13,15 +13,20 @@ import android.os.Build
  */
 object OpusDecoderSupport {
     fun isAvailable(): Boolean = try {
-        if (Build.VERSION.SDK_INT >= 21) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
-                    !info.isEncoder && info.supportedTypes.any {
-                        it.equals(MediaFormat.MIMETYPE_AUDIO_OPUS, ignoreCase = true)
-                    }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                !info.isEncoder && info.supportedTypes.any {
+                    it.equals(MediaFormat.MIMETYPE_AUDIO_OPUS, ignoreCase = true)
                 }
-            } else {
-                true
+            }
+        } else if (Build.VERSION.SDK_INT >= 21) {
+            @Suppress("DEPRECATION")
+            (0 until MediaCodecList.getCodecCount()).any { i ->
+                @Suppress("DEPRECATION")
+                val info = MediaCodecList.getCodecInfoAt(i)
+                !info.isEncoder && info.supportedTypes.any {
+                    it.equals("audio/opus", ignoreCase = true)
+                }
             }
         } else {
             false

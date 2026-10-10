@@ -51,6 +51,9 @@ class UsbAutoConfirmServiceTest {
 
     @Test fun onlySystemUsbActivitiesAreAccepted() {
         assertTrue(UsbAutoConfirmService.isSystemUsbWindow("com.android.systemui", "com.android.systemui.usb.UsbPermissionActivity"))
+        assertTrue(UsbAutoConfirmService.isSystemUsbWindow("com.android.systemui", "com.android.systemui.usb.UsbResolverActivity"))
+        assertTrue(UsbAutoConfirmService.isSystemUsbWindow("com.android.settings", "com.android.settings.usb.UsbPermissionActivity"))
+        assertTrue(UsbAutoConfirmService.isSystemUsbWindow("com.android.vpndialogs", "com.android.vpndialogs.ConfirmDialog"))
         assertFalse(UsbAutoConfirmService.isSystemUsbWindow("evil.app", "com.android.systemui.usb.UsbPermissionActivity"))
         assertFalse(UsbAutoConfirmService.isSystemUsbWindow("com.android.systemui", "android.app.AlertDialog"))
         assertFalse(UsbAutoConfirmService.isSystemUsbWindow("com.android.systemui", "com.android.systemui.media.MediaProjectionPermissionActivity"))
@@ -59,6 +62,8 @@ class UsbAutoConfirmServiceTest {
     @Test fun promptMustNameDiPlayAndUsbExplicitly() {
         assertTrue(UsbAutoConfirmService.isTargetPrompt("Allow DiPlay to access this USB device?", "DiPlay"))
         assertTrue(UsbAutoConfirmService.isTargetPrompt("允许 DiPlay 访问 USB 设备？", "DiPlay"))
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("DiPlay 尝试创建网络连接请求 (VPN)", "DiPlay"))
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("Connection request from DiPlay", "DiPlay"))
         assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow CarPlay access to iPhone?", "DiPlay"))
         assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow DiPlay to access your contacts?", "DiPlay"))
         assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow FakeDiPlay USB access?", "DiPlay"))

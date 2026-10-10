@@ -54,11 +54,10 @@ class UsbAutoConfirmService : AccessibilityService() {
             }
             val confirmed = visit(root) { node ->
                 val label = node.text?.toString()?.trim()
-                val isButton = node.className?.toString()?.contains("Button", ignoreCase = true) == true || label != null
-                node.isEnabled && node.isClickable && isButton &&
+                node.isEnabled && node.isClickable &&
                     (node.viewIdResourceName == "android:id/button1" ||
                         node.viewIdResourceName?.endsWith(":id/button1") == true ||
-                        CONFIRM_LABELS.any { it.equals(label, ignoreCase = true) }) &&
+                        (label != null && CONFIRM_LABELS.any { it.equals(label, ignoreCase = true) })) &&
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             }
             if (confirmed) {
