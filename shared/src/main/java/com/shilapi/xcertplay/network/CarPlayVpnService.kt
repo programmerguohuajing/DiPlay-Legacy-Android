@@ -65,6 +65,8 @@ class CarPlayVpnService : VpnService() {
     private var bridge: Ipv6NcmBridge? = null
     private var tun: ParcelFileDescriptor? = null
     private var attachGeneration = 0
+    @Volatile var lastAttachFailure: String? = null
+        private set
 
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -86,6 +88,8 @@ class CarPlayVpnService : VpnService() {
         }
         active.set(true)
         val generation = ++attachGeneration
+        lastAttachFailure = null
+        var attachStage = "VPN configuration"
         return try {
             val address = InetAddress.getByName(linkLocal)
             if (address !is Inet6Address || !address.isLinkLocalAddress) {
@@ -104,23 +108,32 @@ class CarPlayVpnService : VpnService() {
             }
             // KitKat has no per-app VPN. Only the IPv6 link-local route above is installed;
             // no default route, DNS, Wi-Fi internet or mobile internet is captured.
+            attachStage = "VPN establish"
             val tunFd = builder.establish()
                 ?: throw IOException("VpnService.establish returned null")
             tun = tunFd
+            runCatching { listener.onDebugLog("wired VPN TUN established address=$linkLocal mtu=$TUN_MTU") }
             if (Build.VERSION.SDK_INT < 21) LegacyTunBlocking.enable(tunFd)
 
             val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac, linkLocal) { error ->
                 onTransportError(generation, listener, error)
             }
+            attachStage = "NCM IPv6 bridge startup"
             ipv6Bridge.start()
             bridge = ipv6Bridge
+            runCatching { listener.onDebugLog("wired NCM IPv6 bridge started") }
 
+            attachStage = "AirPlay listener bind"
             startAirPlayServer(
                 generation,
                 AirPlayAttachment(address, config, identity, pairings, mfi, listener, media),
             )
+            runCatching { listener.onDebugLog("wired AirPlay listener bound port=${boundPort()}") }
             AttachResult.Started
         } catch (error: Exception) {
+            lastAttachFailure = "$attachStage: ${attachFailure(error)}"
+            Log.e(TAG, "wired VPN/NCM attach failed: $lastAttachFailure", error)
+            runCatching { listener.onDebugLog("wired VPN/NCM attach failed: $lastAttachFailure") }
             releaseLocked()
             AttachResult.Failed(error.message ?: error.javaClass.simpleName)
         }
@@ -357,6 +370,15 @@ class CarPlayVpnService : VpnService() {
         private const val SESSION_NAME = "xcertplay CarPlay"
         private const val TUN_MTU = 1500
 
+        /** Preserve the cause and throwing frame when older ROMs report only "Invalid argument". */
+        internal fun attachFailure(error: Throwable): String {
+            val chain = generateSequence(error) { it.cause }.take(4).joinToString(" <- ") {
+                "${it.javaClass.simpleName}: ${it.message ?: "no message"}"
+            }
+            val origin = error.stackTrace.firstOrNull()
+                ?.let { " at ${it.className.substringAfterLast('.')}.${it.methodName}" }.orEmpty()
+            return chain + origin
+        }
         /** Returns the VPN consent intent, or null when consent is already granted. */
         fun prepare(context: Context): Intent? = VpnService.prepare(context)
     }

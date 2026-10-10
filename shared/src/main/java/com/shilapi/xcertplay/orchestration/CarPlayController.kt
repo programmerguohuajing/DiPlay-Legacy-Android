@@ -2707,6 +2707,7 @@ class CarPlayController(
             }
             is CarPlayVpnService.AttachResult.Failed -> {
                 debugLog("wired VPN/NCM transport attach result=failed ${result.message}")
+                service.lastAttachFailure?.let { debugLog("wired VPN/NCM root failure $it") }
                 ncm.close()
                 onStatus(CarPlayStatus.Failed(result.message))
                 result.message

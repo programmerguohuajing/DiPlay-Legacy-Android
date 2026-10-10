@@ -58,10 +58,11 @@ class NcmUsbBridgeClaimTest {
         assertEquals(listOf("claim:3:true", "claim:4:true", "release:3", "close"), Connection.events)
     }
 
-    @Test fun failedAltSelectionReleasesBothAndCloses() {
+    @Test fun failedAltSelectionRetriesThenReleasesBothAndCloses() {
         Connection.select = false
         fails()
-        assertEquals(listOf("claim:3:true", "claim:4:true", "set:4:1", "release:4", "release:3", "close"), Connection.events)
+        assertEquals(listOf("claim:3:true", "claim:4:true") + List(5) { "set:4:1" } +
+            listOf("release:4", "release:3", "close"), Connection.events)
     }
 
     @Test fun failedFirstClaimClosesWithoutReleasingUnownedInterface() {
