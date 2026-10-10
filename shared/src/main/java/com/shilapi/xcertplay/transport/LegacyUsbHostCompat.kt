@@ -1,4 +1,4 @@
-﻿package com.shilapi.xcertplay.transport
+package com.shilapi.xcertplay.transport
 
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDeviceConnection
@@ -13,6 +13,7 @@ import android.util.Log
  * and older, using the already-authorized device fd returned by UsbManager.
  */
 internal object LegacyUsbHostCompat {
+    private const val USBFS_EBUSY = 16
     data class ConfigurationResult(
         val selected: Boolean,
         val errno: Int?,
@@ -78,11 +79,25 @@ internal object LegacyUsbHostCompat {
         // table. Use the usbfs configuration ioctl so NCM claims see the new interfaces too.
         val fd = runCatching { connection.fileDescriptor }.getOrDefault(-1)
         if (fd < 0) return ConfigurationResult(false, null, activeConfiguration(connection))
-        val errno = try {
+        var errno = try {
             nativeSelect(fd, target)
         } catch (error: LinkageError) {
             Log.w(TAG, "usbfs set-configuration unavailable config=$target", error)
             return ConfigurationResult(false, null, activeConfiguration(connection))
+        }
+        // EBUSY can be transient while a vendor USB host driver finishes releasing
+        // the prior interface table. Retry once; do not treat GET_CONFIGURATION == target
+        // as proof of success, because that readback describes the phone, not the kernel.
+        if (errno == USBFS_EBUSY) {
+            onDiagnostic("usb configuration busy target=$target retrying once after settle")
+            SystemClock.sleep(CONFIG_SETTLE_MILLIS)
+            errno = try {
+                nativeSelect(fd, target)
+            } catch (error: LinkageError) {
+                Log.w(TAG, "usbfs set-configuration retry unavailable config=$target", error)
+                return ConfigurationResult(false, null, activeConfiguration(connection))
+            }
+            onDiagnostic("usb configuration retry target=$target errno=$errno")
         }
         SystemClock.sleep(CONFIG_SETTLE_MILLIS)
         val active = activeConfiguration(connection)

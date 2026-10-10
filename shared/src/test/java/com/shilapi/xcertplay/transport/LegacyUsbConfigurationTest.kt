@@ -65,6 +65,19 @@ class LegacyUsbConfigurationTest {
         assertEquals(0, state.rawSetCalls)
     }
 
+    @Test fun transientBusyRetriesUsbfsAndAcceptsVerifiedSuccess() {
+        var attempts = 0
+        val result = LegacyUsbHostCompat.selectConfiguration(connection, configuration) { _, target ->
+            attempts++
+            if (attempts == 1) 16 else {
+                state.active = target
+                0
+            }
+        }
+        assertTrue(result.selected)
+        assertEquals(2, attempts)
+        assertEquals(6, result.activeConfiguration)
+    }
     @Test fun nativeSuccessCannotOverrideAReadbackMismatch() {
         val result = LegacyUsbHostCompat.selectConfiguration(connection, configuration) { _, _ -> 0 }
         assertFalse(result.selected)
@@ -79,7 +92,7 @@ class LegacyUsbConfigurationTest {
             16
         }
         assertFalse(result.selected)
-        assertEquals(1, calls)
+        assertEquals(2, calls)
         assertEquals(16, result.errno)
         assertEquals(6, result.activeConfiguration)
     }
