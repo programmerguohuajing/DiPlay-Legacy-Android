@@ -109,7 +109,7 @@ class CarPlayVpnService : VpnService() {
             tun = tunFd
             if (Build.VERSION.SDK_INT < 21) LegacyTunBlocking.enable(tunFd)
 
-            val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac) { error ->
+            val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac, linkLocal) { error ->
                 onTransportError(generation, listener, error)
             }
             ipv6Bridge.start()
