@@ -45,6 +45,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.shilapi.xcertplay.adb.LocalAdb
+import com.shilapi.xcertplay.bluetooth.BluetoothAddressResolver
 import com.shilapi.xcertplay.airplay.CarPlayClusterDisplay
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.airplay.ClusterTurnCardOverlay
@@ -1252,6 +1253,20 @@ class DiPlayActivity : ComponentActivity() {
             getString(R.string.connection_setup), R.drawable.ic_dp_connection) { card ->
             card.addView(label(getString(R.string.choose_how_to_connect_follow_the_setup_steps_and_save_your), 16, MUTED))
             card.addView(button(getString(R.string.open_connection_setup), false, ::openConnectionSetupFromSettings), matchButton(12, 60))
+            val customMac = AirPlayPersistence.loadCustomBluetoothMac(this)
+            val detectedMac = BluetoothAddressResolver.resolve(this)
+            val displayValue = when {
+                !customMac.isNullOrBlank() -> customMac
+                !detectedMac.isNullOrBlank() -> getString(R.string.settings_car_bluetooth_mac_auto, detectedMac)
+                else -> getString(R.string.settings_car_bluetooth_mac_not_detected)
+            }
+            card.addView(
+                button("${getString(R.string.settings_car_bluetooth_mac_title)} · $displayValue", false) {
+                    promptCarBluetoothMac()
+                },
+                matchButton(12, 60),
+            )
+            card.addView(label(getString(R.string.settings_car_bluetooth_mac_subtitle), 14, MUTED).apply { setPadding(0, dp(4), 0, 0) })
         }
         filteredSection(content, SettingsSection.DIAGNOSTICS,
             getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
@@ -4005,6 +4020,47 @@ class DiPlayActivity : ComponentActivity() {
             }
         }
         dialog.show()
+    }
+
+    private fun promptCarBluetoothMac() {
+        val input = EditText(this).apply {
+            hint = "AA:BB:CC:DD:EE:FF"
+            setText(AirPlayPersistence.loadCustomBluetoothMac(this@DiPlayActivity).orEmpty())
+            setSingleLine()
+            setSelection(text.length)
+        }
+        val dialogView = column().apply {
+            setPadding(dp(24), dp(12), dp(24), dp(12))
+            addView(label(getString(R.string.settings_car_bluetooth_mac_dialog_message), 14, MUTED))
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.settings_car_bluetooth_mac_dialog_title))
+            .setView(dialogView)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val entered = input.text.toString().trim()
+                if (entered.isBlank()) {
+                    AirPlayPersistence.saveCustomBluetoothMac(this, null)
+                    markReconnectNeeded()
+                    render()
+                } else {
+                    val normalized = BluetoothAddressResolver.normalize(entered)
+                    if (normalized != null) {
+                        AirPlayPersistence.saveCustomBluetoothMac(this, normalized)
+                        markReconnectNeeded()
+                        render()
+                    } else {
+                        toast(getString(R.string.settings_car_bluetooth_mac_invalid))
+                    }
+                }
+            }
+            .setNeutralButton(getString(R.string.settings_car_bluetooth_mac_clear)) { _, _ ->
+                AirPlayPersistence.saveCustomBluetoothMac(this, null)
+                markReconnectNeeded()
+                render()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun wirelessHelp() {

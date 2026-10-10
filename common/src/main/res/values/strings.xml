@@ -742,4 +742,12 @@
     <string name="preset_brand_icons">Preset brand icons</string>
     <string name="car_brand_presets_title">Select Car Brand Icon</string>
     <string name="car_brand_icon_applied">Applied %1$s icon</string>
+    <string name="settings_car_bluetooth_mac_title">Car Bluetooth address</string>
+    <string name="settings_car_bluetooth_mac_subtitle">Declares the car’s native Bluetooth MAC to iPhone for proper audio routing. Reconnect to apply.</string>
+    <string name="settings_car_bluetooth_mac_auto">Auto (%1$s)</string>
+    <string name="settings_car_bluetooth_mac_not_detected">Not detected</string>
+    <string name="settings_car_bluetooth_mac_dialog_title">Car Bluetooth MAC</string>
+    <string name="settings_car_bluetooth_mac_dialog_message">Enter the car’s native Bluetooth MAC address (e.g. AA:BB:CC:DD:EE:FF). Find it in iPhone Settings → Bluetooth → (i) or your car’s Bluetooth settings.</string>
+    <string name="settings_car_bluetooth_mac_clear">Auto / Clear</string>
+    <string name="settings_car_bluetooth_mac_invalid">Please enter a valid 12-digit hexadecimal MAC address.</string>
 </resources>

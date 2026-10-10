@@ -705,4 +705,12 @@
     <string name="preset_brand_icons">选择品牌车标</string>
     <string name="car_brand_presets_title">选择汽车品牌车标</string>
     <string name="car_brand_icon_applied">已应用 %1$s 车标</string>
+    <string name="settings_car_bluetooth_mac_title">车机蓝牙地址</string>
+    <string name="settings_car_bluetooth_mac_subtitle">向 iPhone 宣告车机真实蓝牙 MAC 地址以正常路由音频。重新连接后生效。</string>
+    <string name="settings_car_bluetooth_mac_auto">自动探测 (%1$s)</string>
+    <string name="settings_car_bluetooth_mac_not_detected">未检测到</string>
+    <string name="settings_car_bluetooth_mac_dialog_title">车机蓝牙 MAC 地址</string>
+    <string name="settings_car_bluetooth_mac_dialog_message">输入车机真实蓝牙 MAC 地址（例如 AA:BB:CC:DD:EE:FF）。可在 iPhone「设置 → 蓝牙 → (i)」或车机蓝牙设置中查看。</string>
+    <string name="settings_car_bluetooth_mac_clear">清除 / 自动探测</string>
+    <string name="settings_car_bluetooth_mac_invalid">请输入有效的 12 位十六进制 MAC 地址。</string>
 </resources>

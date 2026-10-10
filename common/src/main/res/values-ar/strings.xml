@@ -645,4 +645,12 @@
     <string name="preset_brand_icons">أيقونات الماركات الجاهزة</string>
     <string name="car_brand_presets_title">اختر أيقونة ماركة السيارة</string>
     <string name="car_brand_icon_applied">تم تطبيق أيقونة %1$s</string>
+    <string name="settings_car_bluetooth_mac_title">عنوان بلوتوث السيارة</string>
+    <string name="settings_car_bluetooth_mac_subtitle">يعلن عنوان MAC لبلوتوث السيارة لـ iPhone لتوجيه الصوت بشكل سليم. أعد الاتصال للتطبيق.</string>
+    <string name="settings_car_bluetooth_mac_auto">تلقائي (%1$s)</string>
+    <string name="settings_car_bluetooth_mac_not_detected">لم يتم اكتشافه</string>
+    <string name="settings_car_bluetooth_mac_dialog_title">عنوان MAC لبلوتوث السيارة</string>
+    <string name="settings_car_bluetooth_mac_dialog_message">أدخل عنوان MAC لبلوتوث السيارة (مثل AA:BB:CC:DD:EE:FF). ستجده في iPhone الإعدادات ← بلوتوث ← (i) أو إعدادات السيارة.</string>
+    <string name="settings_car_bluetooth_mac_clear">تلقائي / مسح</string>
+    <string name="settings_car_bluetooth_mac_invalid">يرجى إدخال عنوان MAC سداسي عشري صالح من 12 خانة.</string>
 </resources>

@@ -104,6 +104,7 @@ object AirPlayPersistence {
     private const val KEY_MFI_I2C_PATH = "mfi_i2c_path"
     private const val KEY_REMOTE_MFI_SERVER = "remote_mfi_server"
     private const val KEY_REMOTE_MFI_TOKEN = "remote_mfi_token"
+    private const val KEY_CUSTOM_BLUETOOTH_MAC = "custom_bluetooth_mac"
     private const val SAFE_AREA_KEY_PREFIX = "safe_area_"
     private const val CUSTOM_ICON_FILE = "airplay-icon.png"
 
@@ -207,6 +208,20 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt(KEY_NAVIGATION_STREAM_TYPE, streamType)
             .apply()
+    }
+
+    fun loadCustomBluetoothMac(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_CUSTOM_BLUETOOTH_MAC, null)?.takeIf { it.isNotBlank() }
+
+    fun saveCustomBluetoothMac(context: Context, mac: String?) {
+        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        if (mac.isNullOrBlank()) {
+            editor.remove(KEY_CUSTOM_BLUETOOTH_MAC)
+        } else {
+            editor.putString(KEY_CUSTOM_BLUETOOTH_MAC, mac.trim())
+        }
+        editor.apply()
     }
 
     fun loadAudioFocusEnabled(context: Context): Boolean =

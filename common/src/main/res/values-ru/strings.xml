@@ -645,4 +645,12 @@
     <string name="preset_brand_icons">Предустановленные логотипы авто</string>
     <string name="car_brand_presets_title">Выберите логотип марки автомобиля</string>
     <string name="car_brand_icon_applied">Применен логотип %1$s</string>
+    <string name="settings_car_bluetooth_mac_title">Bluetooth-адрес автомобиля</string>
+    <string name="settings_car_bluetooth_mac_subtitle">Сообщает собственный MAC-адрес Bluetooth автомобиля iPhone для правильной маршрутизации звука. Переподключите для применения.</string>
+    <string name="settings_car_bluetooth_mac_auto">Авто (%1$s)</string>
+    <string name="settings_car_bluetooth_mac_not_detected">Не обнаружен</string>
+    <string name="settings_car_bluetooth_mac_dialog_title">MAC-адрес Bluetooth автомобиля</string>
+    <string name="settings_car_bluetooth_mac_dialog_message">Введите собственный MAC-адрес Bluetooth автомобиля (например AA:BB:CC:DD:EE:FF). Его можно найти в iPhone Настройки → Bluetooth → (i) или в настройках автомобиля.</string>
+    <string name="settings_car_bluetooth_mac_clear">Авто / Очистить</string>
+    <string name="settings_car_bluetooth_mac_invalid">Пожалуйста, введите корректный 12-значный шестнадцатеричный MAC-адрес.</string>
 </resources>

@@ -645,4 +645,12 @@
     <string name="preset_brand_icons">Iconos de marcas preestablecidos</string>
     <string name="car_brand_presets_title">Seleccionar icono de marca de coche</string>
     <string name="car_brand_icon_applied">Icono de %1$s aplicado</string>
+    <string name="settings_car_bluetooth_mac_title">Dirección Bluetooth del coche</string>
+    <string name="settings_car_bluetooth_mac_subtitle">Declara la MAC de Bluetooth nativa del coche al iPhone para el enrutamiento de audio adecuado. Reconecta para aplicar.</string>
+    <string name="settings_car_bluetooth_mac_auto">Automático (%1$s)</string>
+    <string name="settings_car_bluetooth_mac_not_detected">No detectado</string>
+    <string name="settings_car_bluetooth_mac_dialog_title">MAC de Bluetooth del coche</string>
+    <string name="settings_car_bluetooth_mac_dialog_message">Introduce la dirección MAC de Bluetooth del coche (ej. AA:BB:CC:DD:EE:FF). Búscala en iPhone Ajustes → Bluetooth → (i) o en los ajustes del coche.</string>
+    <string name="settings_car_bluetooth_mac_clear">Automático / Borrar</string>
+    <string name="settings_car_bluetooth_mac_invalid">Introduce una dirección MAC hexadecimal válida de 12 dígitos.</string>
 </resources>
