@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.provider.Settings
+import com.shilapi.xcertplay.compat.BluetoothCompat
 import com.shilapi.xcertplay.transport.BlockingDuplexByteStream
 import com.shilapi.xcertplay.transport.BluetoothRfcommDuplexStream
 import java.io.IOException
@@ -20,10 +21,7 @@ class AndroidBluetoothAdapter(
     private val adapterName: String = "AndroidBluetoothAdapter"
 
     private val adapter: BluetoothAdapter?
-        get() = runCatching {
-            context.getSystemService(BluetoothManager::class.java)?.adapter
-                ?: BluetoothAdapter.getDefaultAdapter()
-        }.getOrNull()
+        get() = runCatching { BluetoothCompat.getAdapter(context) }.getOrNull()
 
     override fun isSupported(): Boolean = adapter != null
 
@@ -60,15 +58,7 @@ class AndroidBluetoothAdapter(
     }
 
     override fun localAddress(context: Context): String? {
-        val adapterAddr = runCatching { adapter?.address }.getOrNull()
-        val settingAddr = runCatching {
-            Settings.Secure.getString(context.contentResolver, "bluetooth_address")
-        }.getOrNull()
-        return listOfNotNull(adapterAddr, settingAddr).firstOrNull {
-            Regex("(?i)([0-9a-f]{2}:){5}[0-9a-f]{2}").matches(it) &&
-                !it.startsWith("02:00:00:00:00:", ignoreCase = false) &&
-                it != "00:00:00:00:00:00"
-        }
+        return BluetoothAddressResolver.resolve(context)
     }
 
     private fun isDeviceConnected(device: BluetoothDevice): Boolean {

@@ -44,9 +44,25 @@ object LockdownTlsEngineFactory {
             val keyManagers = KeyManagerFactory.getInstance("PKIX").apply {
                 init(keyStore, password)
             }.keyManagers
-            val context = SSLContext.getInstance("TLS").apply {
-                init(keyManagers, arrayOf(UsbLockdownTrustManager), null)
-            }
+            // Some Android 4.4/5.1 vendor providers expose only TLSv1 through the generic
+            // "TLS" SSLContext alias, while the version-specific factory supports TLSv1.2.
+            // Never downgrade Lockdown to TLSv1.0/1.1.
+            val context = sequenceOf("TLSv1.2", "TLS")
+                .mapNotNull { protocol ->
+                    runCatching {
+                        SSLContext.getInstance(protocol).apply {
+                            init(keyManagers, arrayOf(UsbLockdownTrustManager), null)
+                        }
+                    }.getOrNull()
+                }
+                .firstOrNull { candidate ->
+                    candidate.createSSLEngine().supportedProtocols.any {
+                        it == "TLSv1.2" || it == "TLSv1.3"
+                    }
+                } ?: throw GeneralSecurityException(
+                    "The Android TLS provider cannot negotiate TLSv1.2 or TLSv1.3; " +
+                        "USB Lockdown requires a compatible security provider"
+                )
             return context.createSSLEngine(PEER_HOST, PEER_PORT).apply {
                 useClientMode = true
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
