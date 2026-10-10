@@ -61,6 +61,17 @@ internal class AudioFocusCoordinator(
     private var focusGeneration = 0L
     private var currentListener = listenerFor(focusGeneration)
     internal val listener: AudioManager.OnAudioFocusChangeListener get() = currentListener
+    /** Diagnostic only: an AudioTrack playing PCM does not prove the vendor audio source is selected. */
+    @Suppress("DEPRECATION")
+    internal fun legacyOutputSnapshot(streamType: Int): String = runCatching {
+        val audio = manager ?: return@runCatching "audioManager=unavailable"
+        val activeStream = streamType.takeIf { it in 0..10 } ?: AudioManager.STREAM_MUSIC
+        "a2dpOn=${audio.isBluetoothA2dpOn} musicActive=${audio.isMusicActive} " +
+            "selectedStream=$activeStream volume=${audio.getStreamVolume(activeStream)}/" +
+            "${audio.getStreamMaxVolume(activeStream)} " +
+            "musicVolume=${audio.getStreamVolume(AudioManager.STREAM_MUSIC)}/" +
+            "${audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}"
+    }.getOrElse { "audioRouteDiagnostics=${it.javaClass.simpleName}" }
 
     private fun listenerFor(generation: Long) = AudioManager.OnAudioFocusChangeListener { change ->
         synchronized(this) {
@@ -1896,6 +1907,9 @@ private class AudioRenderer(
             if (count > 0 && !firstPcmWriteReported) {
                 firstPcmWriteReported = true
                 report("Audio: first PCM write audioType=${format.audioType} bytes=$count api=${Build.VERSION.SDK_INT}")
+                if (Build.VERSION.SDK_INT <= 22) {
+                    report("Audio: legacy output state " + audioFocusCoordinator.legacyOutputSnapshot(channelOverride(mappedChannel ?: AudioChannel.MEDIA)))
+                }
             }
             maxWriteMs = maxOf(maxWriteMs, (System.nanoTime() - writeStarted) / 1_000_000L)
             if (count < 0) {
