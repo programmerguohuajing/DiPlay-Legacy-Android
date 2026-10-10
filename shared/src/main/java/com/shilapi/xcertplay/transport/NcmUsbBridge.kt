@@ -372,7 +372,7 @@ class NcmUsbBridge internal constructor(
         private const val STATUS_POLL_INTERVAL_MILLIS = 500L
         private const val MAX_QUEUED_FRAMES = 256
         private const val MAX_QUEUED_BYTES = 1 shl 20
-        private const val MAX_CONSECUTIVE_WRITE_FAILURES = 3
+        private const val MAX_CONSECUTIVE_WRITE_FAILURES = 25
         private const val NANOS_PER_MILLISECOND = 1_000_000L
 
         /** Claims NCM while retaining the caller's shared USB connection. */

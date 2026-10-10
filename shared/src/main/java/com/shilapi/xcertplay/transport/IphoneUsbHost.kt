@@ -486,7 +486,9 @@ class Iap2UsbSession internal constructor(
             if (completed !== request) {
                 throw failSession("Android completed an unexpected USB request")
             }
-            return@synchronized ByteArray(buffer.position()).also {
+            val position = buffer.position()
+            if (position <= 0) return@synchronized null
+            return@synchronized ByteArray(position).also {
                 buffer.flip()
                 buffer.get(it)
             }

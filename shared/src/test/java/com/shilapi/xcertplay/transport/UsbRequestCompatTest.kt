@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.transport
 
+import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbRequest
 import android.os.Build
 import org.junit.Assert.*
@@ -35,6 +36,30 @@ class UsbRequestCompatTest {
         }
     }
 
+    @Test @Config(sdk = [24])
+    fun failedLegacyWaitClearsFutureForNextPoll() {
+        val compat = UsbRequestCompat()
+        val future = java.util.concurrent.FutureTask<UsbRequest?> {
+            throw IllegalStateException("simulated USB wait failure")
+        }
+        future.run()
+        val field = UsbRequestCompat::class.java.getDeclaredField("inFlight").apply {
+            isAccessible = true
+        }
+        field.set(compat, future)
+        val connection = org.robolectric.util.ReflectionHelpers.newInstance(UsbDeviceConnection::class.java)
+        try {
+            try {
+                compat.requestWait(connection, 100)
+                fail("Expected USB wait exception")
+            } catch (error: IllegalStateException) {
+                assertEquals("simulated USB wait failure", error.message)
+            }
+            assertNull("Completed failed task must not be reused", field.get(compat))
+        } finally {
+            compat.close()
+        }
+    }
     @Implements(UsbRequest::class)
     class Request {
         var length = 0

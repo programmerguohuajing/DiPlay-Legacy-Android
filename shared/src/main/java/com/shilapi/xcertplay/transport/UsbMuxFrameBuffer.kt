@@ -39,7 +39,11 @@ internal class UsbMuxFrameBuffer(private val diagnostic: (String) -> Unit = {}) 
             val followingLength = readU32(bytes, PADDING_BYTES + 4)
             val candidateHeader = previous != null && readU32(bytes, 0) != PROTOCOL_TCP &&
                 readU32(bytes, PADDING_BYTES + 8) == CAPTURED_REPLY_MAGIC
+            val isVersionTarget = previous != null && readU32(bytes, 0) != PROTOCOL_TCP &&
+                followingProtocol == PROTOCOL_VERSION && followingLength == VERSION_BYTES &&
+                readU32(bytes, PADDING_BYTES + 8) == 2
             val validTarget = when {
+                isVersionTarget -> true
                 candidateHeader && followingProtocol == PROTOCOL_TCP &&
                     followingLength in (HEADER_BYTES + TCP_HEADER_BYTES)..MAX_FRAME_BYTES -> {
                     if (bytes.size < PADDING_BYTES + HEADER_BYTES + TCP_HEADER_BYTES) return null
@@ -69,8 +73,9 @@ internal class UsbMuxFrameBuffer(private val diagnostic: (String) -> Unit = {}) 
                 if (bytes.size < HEADER_BYTES) return null
                 length = readU32(bytes, 4)
             } else {
+                val hexDump = bytes.take(32).joinToString("") { "%02x".format(it) }
                 report("USBMUX framing rejected declaredLength=$length bufferedBytes=${bytes.size} " +
-                    "lastUsbReadBytes=$lastUsbReadBytes optionalReplyPadding=${previous != null}")
+                    "lastUsbReadBytes=$lastUsbReadBytes optionalReplyPadding=${previous != null} hex=$hexDump")
                 throw IphoneUsbException.Protocol("Invalid USBMUX frame length $length")
             }
         }

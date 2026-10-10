@@ -5,6 +5,7 @@ import com.shilapi.xcertplay.iap2.message.Iap2ControlMessages
 import com.shilapi.xcertplay.iap2.session.Iap2Session
 import com.shilapi.xcertplay.iap2.wire.Iap2Frame
 import com.shilapi.xcertplay.mfi.Iap2MfiAuthenticationClient
+import java.io.IOException
 import java.net.Inet6Address
 import java.net.InetAddress
 
@@ -68,7 +69,19 @@ class Iap2WiredControlClient(
                 location.tick { send(it, deadlineNanos) }
                 vehicleStatus.tick { send(it, deadlineNanos) }
                 val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining))
-                val incoming = session.recv(pollTimeout)
+                val incoming = try {
+                    session.recv(pollTimeout)
+                } catch (failure: IOException) {
+                    if (session.isClosed) {
+                        return Iap2WiredControlResult(
+                            Iap2WiredControlTerminal.CHANNEL_CLOSED,
+                            stage,
+                            forwardedFrames,
+                            carPlayStartSessions,
+                        )
+                    }
+                    throw failure
+                }
                 if (incoming == null) {
                     if (session.isClosed) {
                         return Iap2WiredControlResult(

@@ -6,6 +6,7 @@ import com.shilapi.xcertplay.iap2.message.Iap2WirelessSessionParameters
 import com.shilapi.xcertplay.iap2.session.Iap2Session
 import com.shilapi.xcertplay.iap2.wire.Iap2Frame
 import com.shilapi.xcertplay.mfi.Iap2MfiAuthenticationClient
+import java.io.IOException
 import kotlin.math.min
 
 /**
@@ -93,7 +94,23 @@ class Iap2WirelessControlClient(
                 location.tick(::sendControl)
                 vehicleStatus.tick(::sendControl)
                 val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining))
-                val incoming = session.recv(pollTimeout)
+                val incoming = try {
+                    session.recv(pollTimeout)
+                } catch (failure: IOException) {
+                    if (session.isClosed) {
+                        return Iap2WirelessControlResult(
+                            Iap2WirelessControlTerminal.CHANNEL_CLOSED,
+                            stage,
+                            forwardedFrames,
+                            wifiConfigurationsSent,
+                            carPlayStartSessionsSent,
+                            transportNotificationSeen,
+                            postTransportWiFiConfigurationsSent,
+                            wirelessCarPlayAvailableSeen,
+                        )
+                    }
+                    throw failure
+                }
                 if (incoming == null) {
                     if (session.isClosed) {
                         return Iap2WirelessControlResult(

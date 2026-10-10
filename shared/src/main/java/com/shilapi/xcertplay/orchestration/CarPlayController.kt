@@ -142,7 +142,8 @@ internal fun isWirelessHandoffInProgress(
     handoffRequested: Boolean,
     tunnelActive: Boolean,
     sessionActive: Boolean,
-): Boolean = handoffRequested || tunnelActive || sessionActive
+    startSessionSent: Boolean = false,
+): Boolean = handoffRequested || tunnelActive || sessionActive || startSessionSent
 
 /**
  * Wires the complete wired or wireless CarPlay path: MFi coprocessor discovery, iPhone bring-up,
@@ -1428,11 +1429,15 @@ class CarPlayController(
                             handoffRequested = wirelessHandoffRequested.get(),
                             tunnelActive = wirelessTunnelChannel != null,
                             sessionActive = activeSession != null,
+                            startSessionSent = result.carPlayStartSessionsSent > 0,
                         )
                         if (!handoffInProgress) {
                             throw IOException(
                                 "Wireless CarPlay control channel closed before tunnel iAP2 ready",
                             )
+                        }
+                        if (result.carPlayStartSessionsSent > 0 && !wirelessHandoffRequested.get()) {
+                            armWirelessHandoffWatchdog(generation)
                         }
                         debugLog(
                             "wireless Bluetooth bootstrap closed during handoff; " +

@@ -23,6 +23,19 @@ class WirelessHandoffTest {
                 handoffRequested = false,
                 tunnelActive = false,
                 sessionActive = false,
+                startSessionSent = false,
+            ),
+        )
+    }
+
+    @Test
+    fun startSessionSentKeepsHandoffAliveBeforeTunnelConnects() {
+        assertTrue(
+            isWirelessHandoffInProgress(
+                handoffRequested = false,
+                tunnelActive = false,
+                sessionActive = false,
+                startSessionSent = true,
             ),
         )
     }

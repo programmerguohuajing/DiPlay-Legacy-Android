@@ -173,6 +173,10 @@ class Iap2UsbMuxHost private constructor(
             if (remainingNanos <= 0) return null
             val remainingMillis = (remainingNanos + NANOS_PER_MILLISECOND - 1) / NANOS_PER_MILLISECOND
             val bytes = pipe.read(remainingMillis) ?: continue
+            if (bytes.all { it == 0.toByte() }) {
+                Log.w("xcertplay-usb", "discarding all-zero USB transfer (${bytes.size} bytes)")
+                continue
+            }
             synchronized(stateLock) {
                 receiveFrames.append(bytes)
             }

@@ -46,6 +46,8 @@ internal class UsbRequestCompat : Closeable {
             Thread.currentThread().interrupt()
             throw TimeoutException("USB request wait was interrupted")
         } catch (error: ExecutionException) {
+            // A failed Future is terminal; the next poll must submit a fresh request.
+            inFlight = null
             when (val cause = error.cause) {
                 is RuntimeException -> throw cause
                 is Error -> throw cause
