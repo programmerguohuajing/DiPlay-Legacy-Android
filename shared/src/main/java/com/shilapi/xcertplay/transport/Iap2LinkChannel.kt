@@ -144,12 +144,14 @@ class Iap2LinkChannel private constructor(
 
     private fun runPump() {
         val engine = Iap2LinkEngine(linkConfig)
+        var sentBytes = 0L
+        var receivedBytes = 0L
         try {
             engine.start(wiredInitiator = initiateNegotiation, nowMillis = nowMillis())
             while (!isClosing()) {
                 drainCommands(engine)
                 engine.advanceTime(nowMillis())
-                flush(engine)
+                sentBytes += flush(engine)
                 if (!drainEvents(engine)) return
                 if (isClosing()) return
 
@@ -162,8 +164,17 @@ class Iap2LinkChannel private constructor(
                 if (isClosing()) return
                 when {
                     received == null -> Unit
-                    received.isEmpty() -> engine.feedEof()
-                    else -> engine.feed(received, nowMillis())
+                    received.isEmpty() -> {
+                        if (!initiateNegotiation && !engine.writable()) {
+                            finish(IOException("Bluetooth iAP2 peer closed before link ready state=${engine.state()} sentBytes=$sentBytes receivedBytes=$receivedBytes"))
+                            return
+                        }
+                        engine.feedEof()
+                    }
+                    else -> {
+                        receivedBytes += received.size
+                        engine.feed(received, nowMillis())
+                    }
                 }
             }
             finish(null)
@@ -172,7 +183,13 @@ class Iap2LinkChannel private constructor(
                 finish(failure)
                 throw failure
             }
-            if (isClosing()) finish(null) else finish(failure)
+            if (isClosing()) {
+                finish(null)
+            } else if (!initiateNegotiation && !engine.writable() && failure is IOException) {
+                finish(IOException("Bluetooth iAP2 handshake interrupted state=${engine.state()} sentBytes=$sentBytes receivedBytes=$receivedBytes", failure))
+            } else {
+                finish(failure)
+            }
         }
     }
 
@@ -193,9 +210,10 @@ class Iap2LinkChannel private constructor(
         }
     }
 
-    private fun flush(engine: Iap2LinkEngine) {
+    private fun flush(engine: Iap2LinkEngine): Long {
         val bytes = engine.takeOutput()
         if (bytes.isNotEmpty()) underlying.send(bytes)
+        return bytes.size.toLong()
     }
 
     /** Returns false when a link terminal event has been observed. */
