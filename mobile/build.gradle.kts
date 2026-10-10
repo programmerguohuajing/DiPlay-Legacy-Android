@@ -33,8 +33,8 @@ android {
         multiDexEnabled = true
         multiDexKeepProguard = file("multidex-config.pro")
         testInstrumentationRunner = "com.shilapi.xcertplay.T3LegacyInstrumentation"
-        versionCode = 51
-        versionName = "0.2.31"
+        versionCode = 52
+        versionName = "0.2.32"
 
     }
 
@@ -47,9 +47,10 @@ android {
                 ?: rootProject.file("release-signing.keystore").takeIf { it.isFile }
             storeFile = providers.environmentVariable("ANDROID_KEYSTORE_PATH")
                 .orNull?.let { file(it) } ?: localKeystore ?: file("missing-release-keystore.jks")
-            storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrElse("")
-            keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").getOrElse("")
-            keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").getOrElse("")
+            val hasLocal = localKeystore != null
+            storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse(if (hasLocal) "diplay123456" else "").get()
+            keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orElse(if (hasLocal) "diplay" else "").get()
+            keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orElse(if (hasLocal) "diplay123456" else "").get()
         }
     }
 
@@ -135,9 +136,12 @@ val verifyReleaseSigningIdentity by tasks.registering(VerifyDiPlaySigningTask::c
     group = "verification"
     description = "Validate the original DiPlay release certificate before any release APK is signed."
     keyStoreFile.set(layout.file(providers.provider { android.signingConfigs.getByName("release").storeFile!! }))
-    keyStorePassword.set(providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse(""))
-    keyAlias.set(providers.environmentVariable("ANDROID_KEY_ALIAS").orElse(""))
-    keyPassword.set(providers.environmentVariable("ANDROID_KEY_PASSWORD").orElse(""))
+    val localKeystore = rootProject.file("release-signing.jks").takeIf { it.isFile }
+        ?: rootProject.file("release-signing.keystore").takeIf { it.isFile }
+    val hasLocal = localKeystore != null
+    keyStorePassword.set(providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse(if (hasLocal) "diplay123456" else ""))
+    keyAlias.set(providers.environmentVariable("ANDROID_KEY_ALIAS").orElse(if (hasLocal) "diplay" else ""))
+    keyPassword.set(providers.environmentVariable("ANDROID_KEY_PASSWORD").orElse(if (hasLocal) "diplay123456" else ""))
 }
 tasks.matching { it.name == "validateSigningRelease" }.configureEach {
     dependsOn(verifyReleaseSigningIdentity)
