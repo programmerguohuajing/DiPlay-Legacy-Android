@@ -1,0 +1,50 @@
+﻿name: Verify DiPlay Release Signature
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing GitHub release tag to verify"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release-signature:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Android build tools
+        uses: android-actions/setup-android@v3
+      - name: Install APK signer
+        run: sdkmanager "build-tools;35.0.0"
+      - name: Download release APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+        run: |
+          mkdir -p release-apk
+          gh release download "$TAG" --repo "$REPOSITORY" --pattern '*.apk' --dir release-apk
+          count=$(find release-apk -maxdepth 1 -type f -name '*.apk' | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected exactly one release APK, got $count"
+            exit 1
+          fi
+      - name: Verify signature against v0.2.21 identity
+        env:
+          EXPECTED_SHA256: bca015c0cb43469fee55539b4054ff862671e7b41e6612eee0cb8566d327b7ae
+        run: |
+          set -euo pipefail
+          apk=$(find release-apk -maxdepth 1 -type f -name '*.apk' -print -quit)
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$signer" verify --min-sdk-version 19 --print-certs "$apk" > certs.txt
+          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' certs.txt | head -1 | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+          if [[ "$actual" != "$EXPECTED_SHA256" ]]; then
+            echo "::error::Release APK signing certificate differs from v0.2.21. Do not publish as an in-place upgrade."
+            exit 1
+          fi
+          echo "Release certificate matches v0.2.21."

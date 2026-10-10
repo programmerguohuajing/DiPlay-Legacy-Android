@@ -1,4 +1,13 @@
 import com.android.build.gradle.internal.tasks.L8DexDesugarLibTask
+import java.security.KeyStore
+import java.security.MessageDigest
+import org.gradle.api.DefaultTask
+import org.gradle.api.provider.Property
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.TaskAction
 
 plugins {
     alias(libs.plugins.android.application)
@@ -38,9 +47,9 @@ android {
                 ?: rootProject.file("release-signing.keystore").takeIf { it.isFile }
             storeFile = providers.environmentVariable("ANDROID_KEYSTORE_PATH")
                 .orNull?.let { file(it) } ?: localKeystore ?: file("missing-release-keystore.jks")
-            storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrElse("diplay123456")
-            keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").getOrElse("diplay")
-            keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").getOrElse("diplay123456")
+            storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").getOrElse("")
+            keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").getOrElse("")
+            keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").getOrElse("")
         }
     }
 
@@ -53,7 +62,7 @@ android {
             optimization {
                 enable = false
             }
-            signingConfig = if (signingConfigs.getByName("release").storeFile?.isFile == true) { signingConfigs.getByName("release") } else { signingConfigs.getByName("debug") }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -89,6 +98,50 @@ dependencies {
     authenticationProbeRuntime("org.jetbrains.kotlin:kotlin-stdlib:${libs.versions.kotlin.get()}")
 }
 
+abstract class VerifyDiPlaySigningTask : DefaultTask() {
+    @get:org.gradle.api.tasks.Internal abstract val keyStoreFile: RegularFileProperty
+    @get:Input abstract val keyStorePassword: Property<String>
+    @get:Input abstract val keyAlias: Property<String>
+    @get:Input abstract val keyPassword: Property<String>
+
+    @TaskAction fun verify() {
+        val keyFile = keyStoreFile.orNull?.asFile
+        check(keyFile?.isFile == true && keyStorePassword.get().isNotBlank() &&
+            keyAlias.get().isNotBlank() && keyPassword.get().isNotBlank()) {
+            "Release requires the original DiPlay signing keystore and explicit ANDROID_KEY* variables. Debug signing is forbidden."
+        }
+        val secret = keyStorePassword.get().toCharArray()
+        val store = KeyStore.getInstance(KeyStore.getDefaultType())
+        try {
+            keyFile!!.inputStream().use { store.load(it, secret) }
+        } catch (error: Exception) {
+            throw GradleException("Release signing keystore cannot be opened", error)
+        } finally {
+            secret.fill(0.toChar())
+        }
+        val alias = keyAlias.get()
+        check(store.isKeyEntry(alias)) { "Release signing alias is not a private key entry" }
+        val privateKey = runCatching { store.getKey(alias, keyPassword.get().toCharArray()) }.getOrNull()
+        check(privateKey is java.security.PrivateKey) { "Release signing private key cannot be unlocked with ANDROID_KEY_PASSWORD" }
+        val cert = store.getCertificate(alias) ?: throw GradleException("Release signing certificate not found")
+        val fingerprint = MessageDigest.getInstance("SHA-256")
+            .digest(cert.encoded).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        check(fingerprint.equals("bca015c0cb43469fee55539b4054ff862671e7b41e6612eee0cb8566d327b7ae", true)) {
+            "Release certificate differs from v0.2.21; refusing to create an update-incompatible APK."
+        }
+    }
+}
+val verifyReleaseSigningIdentity by tasks.registering(VerifyDiPlaySigningTask::class) {
+    group = "verification"
+    description = "Validate the original DiPlay release certificate before any release APK is signed."
+    keyStoreFile.set(layout.file(providers.provider { android.signingConfigs.getByName("release").storeFile!! }))
+    keyStorePassword.set(providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orElse(""))
+    keyAlias.set(providers.environmentVariable("ANDROID_KEY_ALIAS").orElse(""))
+    keyPassword.set(providers.environmentVariable("ANDROID_KEY_PASSWORD").orElse(""))
+}
+tasks.matching { it.name == "validateSigningRelease" }.configureEach {
+    dependsOn(verifyReleaseSigningIdentity)
+}
 // No implicit import. Only the two explicitly selected local runtime assets are allowed.
 val credentialAssets = files(android.sourceSets.flatMap { source ->
     source.assets.directories.map { directory ->
@@ -148,5 +201,5 @@ tasks.register("assembleStandaloneDebug") {
 tasks.register("assembleStandaloneRelease") {
     group = "build"
     description = "Build a signed standalone APK with explicitly provisioned authentication."
-    dependsOn(verifyStandaloneAuthentication, "assembleRelease")
+    dependsOn(verifyStandaloneAuthentication, verifyReleaseSigningIdentity, "assembleRelease")
 }
