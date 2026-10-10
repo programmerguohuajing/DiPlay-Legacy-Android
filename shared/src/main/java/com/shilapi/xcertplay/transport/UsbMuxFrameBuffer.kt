@@ -26,6 +26,10 @@ internal class UsbMuxFrameBuffer(private val diagnostic: (String) -> Unit = {}) 
         var length = readU32(bytes, 4)
         if (length !in HEADER_BYTES..MAX_FRAME_BYTES) {
             val previous = optionalReplyPadding
+            if (previous != null && bytes.all { it == 0.toByte() }) {
+                bytes = ByteArray(0)
+                return null
+            }
             // The captured iOS 27 VERSION and valid RX TCP replies, including payload-bearing
             // replies, have four extra bytes. Do not scan or discard a USB completion:
             // only this single four-byte boundary is eligible, before validated TCP or the

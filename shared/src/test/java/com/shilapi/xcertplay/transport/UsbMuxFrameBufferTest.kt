@@ -384,6 +384,16 @@ class UsbMuxFrameBufferTest {
         assertTrue(reports.none { it.contains("detected") || it.contains("Expected") || it.contains("received") })
     }
 
+    @Test fun allZeroBufferIsSafelyClearedWithoutProtocolFailure() {
+        val buffer = after(synAck)
+        buffer.append(ByteArray(40))
+        assertNull(buffer.takeFrame())
+        assertEquals(0, buffer.bufferedBytes)
+        // Ensure subsequent valid frame parses cleanly
+        buffer.append(tcp(data = data))
+        assertArrayEquals(data, buffer.takeFrame()!!.payload.copyOfRange(20, 20 + data.size))
+    }
+
     private fun assertEverySplitPreservesFrames(first: ByteArray, padding: ByteArray, next: ByteArray) {
         val wire = first + padding + next
         for (split in 0..wire.size) {

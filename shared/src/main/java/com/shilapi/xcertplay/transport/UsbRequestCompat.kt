@@ -18,6 +18,9 @@ import java.util.concurrent.TimeoutException
  * on one daemon worker and impose the timeout through Future.get().
  */
 internal class UsbRequestCompat : Closeable {
+    @Volatile
+    private var closed = false
+
     private val waitExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "xcertplay-usb-wait").apply { isDaemon = true }
     }
@@ -28,6 +31,7 @@ internal class UsbRequestCompat : Closeable {
 
     @Throws(TimeoutException::class)
     fun requestWait(connection: UsbDeviceConnection, timeoutMillis: Long): UsbRequest? {
+        if (closed) return null
         val timeout = timeoutMillis.coerceAtLeast(1L)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             return connection.requestWait(timeout)
@@ -35,7 +39,11 @@ internal class UsbRequestCompat : Closeable {
 
         var future = inFlight
         if (future == null) {
-            future = waitExecutor.submit<UsbRequest?> { connection.requestWait() }
+            if (closed) return null
+            future = waitExecutor.submit<UsbRequest?> {
+                if (closed) return@submit null
+                connection.requestWait()
+            }
             inFlight = future
         }
         try {
@@ -57,6 +65,10 @@ internal class UsbRequestCompat : Closeable {
     }
 
     override fun close() {
+        closed = true
+        inFlight?.cancel(true)
+        inFlight = null
         waitExecutor.shutdownNow()
+        runCatching { waitExecutor.awaitTermination(200, TimeUnit.MILLISECONDS) }
     }
 }

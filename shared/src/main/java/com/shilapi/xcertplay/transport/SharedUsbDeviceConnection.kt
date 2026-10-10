@@ -1,4 +1,4 @@
-﻿package com.shilapi.xcertplay.transport
+package com.shilapi.xcertplay.transport
 
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbRequest
@@ -46,8 +46,8 @@ internal class SharedUsbDeviceConnection private constructor(
         check(references >= 0) { "USB device connection released too many times" }
         if (references == 0) {
             closed = true
-            connection.close()
             usbCompat.close()
+            connection.close()
         }
     }
 

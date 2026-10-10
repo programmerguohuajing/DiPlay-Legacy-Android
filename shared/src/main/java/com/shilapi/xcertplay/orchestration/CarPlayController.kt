@@ -1841,9 +1841,14 @@ class CarPlayController(
                         connectionDiagnostic("Ignoring stale USB permission denial while phase=$phase")
                         return
                     }
-                    val currentGranted = runCatching { requireUsbManager().hasPermission(result.device) }.getOrDefault(false)
+                    val currentGranted = runCatching { requireUsbManager().hasPermission(result.device) }.getOrDefault(false) ||
+                        runCatching { iphoneHost.discover().any { requireUsbManager().hasPermission(it) } }.getOrDefault(false)
                     if (currentGranted) {
-                        connectionDiagnostic("Ignoring USB permission denial because UsbManager reports granted for device ${result.device.deviceId}")
+                        connectionDiagnostic("Ignoring USB permission denial because UsbManager reports granted for matching iPhone")
+                        return
+                    }
+                    if (permissionGrant.get()) {
+                        connectionDiagnostic("Ignoring USB permission denial because permission was already granted")
                         return
                     }
                     permissionGrant.set(true)
