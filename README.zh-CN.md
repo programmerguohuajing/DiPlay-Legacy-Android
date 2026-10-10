@@ -5,8 +5,8 @@
 > 本项目基于开源项目 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 进行深度兼容与重构。
 >
 > **关于与上游原版的定位差异**：
-> - 上游原项目在最新预览版（v0.2.16+）已向下适配至 **Android 7.1+ (API 25)**，主要面向 64 位及较新版本的车机系统。
-> - 本项目致力于补充 **Android 4.4 KitKat (API 19) 至 Android 7.0** 这一区间的极老车机市场，以及全志 T3、联发科 MTK、AC8227L、Intel x86 等 **32 位老旧芯片与定制 ROM**。
+> - 上游原项目在最新版本已向下适配至 **Android 7.0+ (API 24)**，主要面向 64 位及较新版本的车机系统。
+> - 本项目致力于补充 **Android 4.4 KitKat (API 19) 至 Android 6.0** 这一区间的极老车机市场，以及全志 T3、联发科 MTK、AC8227L、Intel x86 等 **32 位老旧芯片与定制 ROM**，并对日产航盛等专有蓝牙车机提供深度定制兼容。
 >
 > 上游原项目地址：https://github.com/shihabal3amri/DiPlay
 
@@ -43,6 +43,12 @@
 ### 5. USB 底层连接优化与驱动冲突解决
 - **自动驱动脱钩 (解决 `iPhone USB configuration is busy` / errno 16)**：底层 C 语言驱动层在切换 Configuration 6 遇到 `EBUSY` 时，自动探测并执行 `USBDEVFS_DISCONNECT` 解绑内核冲突驱动，并自动重试。
 - **全志 T3 等芯片专属单 fd 共享**：USBMUX 与 NCM 数据通道共用已授权的底层设备描述符，避免二次 `openDevice` 导致内核抛出 `ENOENT` / `EBUSY`。
+
+### 6. 东风日产等搭载航盛定制协议栈车机深度适配 (HSAE P170/P660)
+- **航盛私有蓝牙服务 AIDL 深度适配**：支持日产逍客、轩逸、奇骏、天籁等搭载的航盛专用蓝牙栈（`com.hsae.bluetoothservice` 与 `com.anwsdk.service`），突破原生 AOSP RFCOMM Socket 读超时断连限制 (`IOException: read failed ... ret: -1`)。
+- **混合蓝牙适配架构 (Hybrid Bluetooth Adapter)**：运行时动态探测航盛服务，在非日产设备上 100% 干净回退至标准 Android 蓝牙，做到对所有平台透明无感。
+- **Linux 4.9 内核热点 IPv6 路由黑洞修复**：解决日产定制 Android 9 内核下 link-local IPv6 导致 iPhone 热点连接“正在搜索设备”卡死的问题，优先采用稳定 IPv4 握手。
+- **AudioTrack 兼容防护**：针对定制系统 `AudioTrack.getAudioAttributes()` 调用异常添加保护，防止音频通道初始化崩溃。
 
 ---
 

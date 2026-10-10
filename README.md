@@ -5,8 +5,8 @@
 > This project is modified from [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) with deep compatibility refactoring.
 >
 > **Scope difference with upstream**:
-> - Upstream DiPlay supports **Android 7.1+ (API 25)** starting from v0.2.16 public preview, primarily targeting modern 64-bit platforms.
-> - This project focuses on **Android 4.4 KitKat (API 19) through Android 7.0**, as well as legacy 32-bit automotive hardware architectures (`armeabi-v7a`, `x86`, Allwinner T3, MediaTek, AC8227L) and low-level Linux usbfs driver hardening.
+> - Upstream DiPlay supports **Android 7.0+ (API 24)** in latest releases, primarily targeting modern 64-bit platforms.
+> - This project focuses on **Android 4.4 KitKat (API 19) through Android 6.0**, as well as legacy 32-bit automotive hardware architectures (`armeabi-v7a`, `x86`, Allwinner T3, MediaTek, AC8227L), low-level Linux usbfs driver hardening, and proprietary Bluetooth stacks (e.g., Hangsheng HSAE for Dongfeng Nissan).
 >
 > Upstream project: https://github.com/shihabal3amri/DiPlay
 

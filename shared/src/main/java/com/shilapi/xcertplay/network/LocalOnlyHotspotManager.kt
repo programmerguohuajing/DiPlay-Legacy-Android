@@ -631,11 +631,12 @@ class LocalOnlyHotspotManager(context: Context, private val onDiagnostic: (Strin
                 .firstNotNullOfOrNull { it.toEui64MacAddress() }
 
     private fun NetworkInterface.hotspotAddress(): InetAddress? {
-        if (LocalHotspotRadioPolicy.supportsSystemBand(Build.VERSION.SDK_INT)) {
-            return wirelessHostAddress(Collections.list(inetAddresses), index, preferIpv4 = true)
-        }
+        wirelessHostAddress(Collections.list(inetAddresses), index, preferIpv4 = true)?.let { return it }
         var ipv4: InetAddress? = null
         for (address in Collections.list(inetAddresses)) {
+            if (address is Inet4Address && !address.isLoopbackAddress && ipv4 == null) {
+                ipv4 = address
+            }
             if (address is Inet6Address && address.isLinkLocalAddress) {
                 if (address.scopeId == index) return address
                 try {
@@ -643,9 +644,6 @@ class LocalOnlyHotspotManager(context: Context, private val onDiagnostic: (Strin
                 } catch (_: UnknownHostException) {
                     continue
                 }
-            }
-            if (address is Inet4Address && !address.isLoopbackAddress && ipv4 == null) {
-                ipv4 = address
             }
         }
         return ipv4

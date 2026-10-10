@@ -4,7 +4,7 @@ import java.net.Inet4Address
 import java.net.Inet6Address
 import java.net.InetAddress
 
-internal fun wirelessHostAddress(addresses: List<InetAddress>, interfaceIndex: Int, preferIpv4: Boolean = false): InetAddress? {
+internal fun wirelessHostAddress(addresses: List<InetAddress>, interfaceIndex: Int, preferIpv4: Boolean = true): InetAddress? {
     val ipv4 = if (preferIpv4) addresses.filterIsInstance<Inet4Address>().firstOrNull {
         !it.isLoopbackAddress && !it.isLinkLocalAddress && !it.isAnyLocalAddress && !it.isMulticastAddress
     } else null

@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothProfile
 import com.shilapi.xcertplay.compat.BluetoothCompat
+import com.shilapi.xcertplay.bluetooth.CarPlayBluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.ComponentName
 import android.content.Context
@@ -262,7 +263,7 @@ class CarPlayController(
     }.apply { if (Build.VERSION.SDK_INT >= 21) removeOnCancelPolicy = true }
     @Volatile private var wirelessDiagnostics: WirelessStartupDiagnostics? = null
     @Volatile private var bluetoothSocket: BluetoothSocket? = null
-    @Volatile private var bluetoothStream: BluetoothRfcommDuplexStream? = null
+    @Volatile private var bluetoothStream: BlockingDuplexByteStream? = null
     @Volatile private var wirelessTunnelChannel: Iap2Session? = null
     @Volatile private var wirelessRuntimeIdentification: Iap2IdentificationConfig? = null
     @Volatile private var wirelessAirPlayEndpoint: Iap2WirelessCarPlayEndpoint? = null
@@ -1224,7 +1225,21 @@ class CarPlayController(
 
             val adapter = bluetoothAdapter
                 ?: throw IOException("Bluetooth adapter is unavailable")
-            if (!adapter.isEnabled) throw IOException("Bluetooth is not enabled")
+            val hybridAdapter = CarPlayBluetoothManager.get(appContext)
+            if (!adapter.isEnabled) {
+                runCatching { adapter.enable() }
+                val enableDeadline = System.currentTimeMillis() + 2500L
+                while (!adapter.isEnabled && System.currentTimeMillis() < enableDeadline) {
+                    try {
+                        Thread.sleep(200L)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            }
+            if (!adapter.isEnabled && !hybridAdapter.isEnabled()) {
+                throw IOException("Bluetooth is not enabled")
+            }
             val device = selectWirelessBluetoothDevice(adapter)
             val hostBluetoothMac = accessoryBluetoothMac(adapter)
             debugLog(
@@ -1306,39 +1321,55 @@ class CarPlayController(
                 "wireless RFCOMM connecting address=${device.address} " +
                     "uuid=$IAP2_IPHONE_UUID",
             )
-            val socket = synchronized(wirelessResourceLock) {
-                if (isStaleWirelessRun(generation)) return
-                device.createRfcommSocketToServiceRecord(UUID.fromString(IAP2_IPHONE_UUID))
-                    .also { bluetoothSocket = it }
-            }
             logBluetoothConnectionSnapshot(device, "before-connect")
             val bluetoothStarted = System.nanoTime()
-            try {
-                connectBluetoothSocket(socket, device.address)
-                connectionDiagnostic("Bluetooth connect completed elapsedMs=${elapsedMillis(bluetoothStarted)} " +
-                    "socketReportedConnected=${runCatching { socket.isConnected }.getOrNull() ?: "unknown"}")
-            } catch (error: Throwable) {
-                connectionDiagnostic(
-                    "Bluetooth connect failed elapsedMs=${elapsedMillis(bluetoothStarted)} " +
-                        "failureClass=${diagnosticFailureClass(error)}",
-                )
-                logBluetoothConnectionSnapshot(device, "after-failure")
-                throw error
+
+            var stream: BlockingDuplexByteStream? = null
+            var connectError: Throwable? = null
+            val connectDeadline = System.currentTimeMillis() + 20000L
+
+            while (stream == null && System.currentTimeMillis() < connectDeadline && !isStaleWirelessRun(generation)) {
+                if (activeSession != null || wirelessActiveReported.get()) {
+                    debugLog("AirPlay session active over Wi-Fi; continuing without Bluetooth bootstrap")
+                    break
+                }
+                try {
+                    stream = hybridAdapter.openRfcommStream(device.address, IAP2_IPHONE_UUID)
+                    bluetoothStream = stream
+                    val elapsed = elapsedMillis(bluetoothStarted)
+                    connectionDiagnostic("Bluetooth connect completed elapsedMs=$elapsed")
+                    debugLog("wireless RFCOMM connected address=${device.address}")
+                    break
+                } catch (e: Throwable) {
+                    connectError = e
+                    val elapsed = elapsedMillis(bluetoothStarted)
+                    connectionDiagnostic(
+                        "Bluetooth connect attempt failed elapsedMs=$elapsed " +
+                            "failureClass=${diagnosticFailureClass(e)}",
+                    )
+                    logBluetoothConnectionSnapshot(device, "after-failure")
+                    if (activeSession != null || wirelessActiveReported.get()) {
+                        break
+                    }
+                    try {
+                        Thread.sleep(1500L)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
             }
-            debugLog("wireless RFCOMM connected address=${device.address}")
-            logBluetoothConnectionSnapshot(device, "after-connect")
+
             if (isStaleWirelessRun(generation)) {
+                closeWirelessStack(generation = generation)
                 return
             }
-            val stream = synchronized(wirelessResourceLock) {
-                if (isStaleWirelessRun(generation)) return
-                try {
-                    BluetoothRfcommDuplexStream(socket, ::connectionDiagnostic).also { bluetoothStream = it }
-                } finally {
-                    // The stream owns the connected socket and also closes it if stream getters
-                    // fail. Do not retain a second socket owner in bootstrap teardown.
-                    if (bluetoothSocket === socket) bluetoothSocket = null
+
+            if (stream == null) {
+                if (activeSession != null || wirelessActiveReported.get()) {
+                    onStatus(CarPlayStatus.WirelessActive)
+                    return
                 }
+                throw (connectError ?: IOException("Failed to connect Bluetooth RFCOMM to ${device.address}"))
             }
             val channel = Iap2Session.openWireless(
                 stream,
@@ -2361,6 +2392,34 @@ class CarPlayController(
                     "connect one iPhone and retry",
             )
         }
+        val hybridBt = CarPlayBluetoothManager.get(appContext)
+        val connectedDevice = hybridBt.getConnectedDevice()
+        if (connectedDevice != null && BluetoothAdapter.checkBluetoothAddress(connectedDevice.address)) {
+            Log.i(
+                IphoneCarPlayConfiguration.TAG,
+                "Using connected device from ${hybridBt.getAdapterName()}: " +
+                    "${connectedDevice.name} (${connectedDevice.address})",
+            )
+            return adapter.getRemoteDevice(connectedDevice.address)
+        }
+        val pairedDevices = hybridBt.getPairedDevices()
+        val pairedIPhones = pairedDevices.filter { it.name.contains("iPhone", ignoreCase = true) }
+        if (pairedIPhones.size == 1 && BluetoothAdapter.checkBluetoothAddress(pairedIPhones.single().address)) {
+            Log.i(
+                IphoneCarPlayConfiguration.TAG,
+                "Using single paired iPhone from ${hybridBt.getAdapterName()}: " +
+                    "${pairedIPhones.single().name} (${pairedIPhones.single().address})",
+            )
+            return adapter.getRemoteDevice(pairedIPhones.single().address)
+        }
+        if (pairedDevices.size == 1 && BluetoothAdapter.checkBluetoothAddress(pairedDevices.single().address)) {
+            Log.i(
+                IphoneCarPlayConfiguration.TAG,
+                "Using single paired device from ${hybridBt.getAdapterName()}: " +
+                    "${pairedDevices.single().name} (${pairedDevices.single().address})",
+            )
+            return adapter.getRemoteDevice(pairedDevices.single().address)
+        }
         if (bonded.size == 1) return bonded.single()
         throw IOException(
             "No unambiguous bonded iPhone found; pair one iPhone and retry",
@@ -2534,7 +2593,12 @@ class CarPlayController(
         } catch (_: SecurityException) {
             null
         }
-        return listOfNotNull(address, settingsAddress)
+        val managerAddress = try {
+            CarPlayBluetoothManager.get(appContext).localAddress(appContext)
+        } catch (_: Throwable) {
+            null
+        }
+        return listOfNotNull(managerAddress, address, settingsAddress)
             .firstOrNull {
                 BLUETOOTH_ADDRESS.matches(it) &&
                     !it.equals(ADAPTER_ADDRESS_PLACEHOLDER, ignoreCase = true)
