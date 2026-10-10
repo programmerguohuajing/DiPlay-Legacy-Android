@@ -1806,6 +1806,15 @@ class CarPlayController(
                     }
                 }
                 is IphoneUsbHost.PermissionResult.Denied -> {
+                    if (phase != Phase.IPHONE && phase != Phase.REENUMERATION) {
+                        connectionDiagnostic("Ignoring stale USB permission denial while phase=$phase")
+                        return
+                    }
+                    val currentGranted = runCatching { requireUsbManager().hasPermission(result.device) }.getOrDefault(false)
+                    if (currentGranted) {
+                        connectionDiagnostic("Ignoring USB permission denial because UsbManager reports granted for device ${result.device.deviceId}")
+                        return
+                    }
                     permissionGrant.set(true)
                     onStatus(CarPlayStatus.Failed("iPhone USB permission was denied"))
                 }

@@ -2,8 +2,12 @@
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-> This project is modified from [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay), with a focus on compatibility with older Android versions (down to Android 4.4 KitKat / API 19) and legacy Android-based head units.
-
+> This project is modified from [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) with deep compatibility refactoring.
+>
+> **Scope difference with upstream**:
+> - Upstream DiPlay supports **Android 7.1+ (API 25)** starting from v0.2.16 public preview, primarily targeting modern 64-bit platforms.
+> - This project focuses on **Android 4.4 KitKat (API 19) through Android 7.0**, as well as legacy 32-bit automotive hardware architectures (`armeabi-v7a`, `x86`, Allwinner T3, MediaTek, AC8227L) and low-level Linux usbfs driver hardening.
+>
 > Upstream project: https://github.com/shihabal3amri/DiPlay
 
 **CarPlay for compatible BYD and legacy Android head units.** Wired and wireless, with the familiar DiAuto interface. Independent app: `com.shihab.diplay`.

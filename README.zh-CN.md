@@ -2,7 +2,11 @@
 
 [简体中文](README.zh-CN.md) · [English](README.md)
 
-> 本项目基于开源项目 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 进行深度兼容与重构，重点适配 **老款 Android 车机（最低支持 Android 4.4 KitKat / API 19）** 及各类车机硬件架构（全志 T3 / 32 位 ARMv7、Intel x86、主流 64 位 ARM 等）。
+> 本项目基于开源项目 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 进行深度兼容与重构。
+>
+> **关于与上游原版的定位差异**：
+> - 上游原项目在最新预览版（v0.2.16+）已向下适配至 **Android 7.1+ (API 25)**，主要面向 64 位及较新版本的车机系统。
+> - 本项目致力于补充 **Android 4.4 KitKat (API 19) 至 Android 7.0** 这一区间的极老车机市场，以及全志 T3、联发科 MTK、AC8227L、Intel x86 等 **32 位老旧芯片与定制 ROM**。
 >
 > 上游原项目地址：https://github.com/shihabal3amri/DiPlay
 
@@ -14,14 +18,15 @@
 
 ## 核心改进与特性
 
-相比上游原版（通常仅支持 Android 9+ 及 64 位系统），本项目针对老车机进行了全方位底层加固与重构：
+相比上游原版（主要面向 Android 7.1+ 及现代 64 位平台），本项目针对老车机进行了全方位底层加固与重构：
 
-### 1. 深度适配低版本 Android 系统 (Android 4.4+)
+### 1. 深度适配低版本 Android 系统 (Android 4.4 ~ Android 7.0)
 - **系统门槛下探至 Android 4.4 (API 19)**：为基础运行路径增加旧版实现与 API 判断。仅在高版本可用的实验性功能不会因此获得低版本硬件支持：
   - 修复 Android 7.0 以下因 `Configuration.locales` 引发的 `NoSuchFieldError` 启动闪退。
   - 修复 Android 6.0 以下因调用 `Context.getSystemService(Class)` 引发的 `NoSuchMethodError` 闪退。
   - 修复 Android 5.0 以下 `Theme.Material` 主题缺失导致的膨胀异常，回退兼容 Holo 主题。
   - 修复无 `BluetoothLeScanner` 低版本系统的蓝牙扫描，支持手动输入蓝牙 MAC 地址连接。
+  - 修复非比亚迪 AOSP 老车机音频通道（默认 stream 14 异常，自适应降级为标准 STREAM_MUSIC）。
 
 ### 2. 解决安装与解析包失败问题
 - **双重签名机制 (v1 JAR + v2 APK Signature)**：

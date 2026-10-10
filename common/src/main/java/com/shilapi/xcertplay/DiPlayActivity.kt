@@ -149,7 +149,7 @@ class DiPlayActivity : ComponentActivity() {
     internal var usbPermissionOperationFactory: (Context) -> UsbPermissionSetup.Operation = {
         UsbPermissionSetup.Operation(it.applicationContext)
     }
-    private var navigationStreamType = 14
+    private var navigationStreamType = android.media.AudioManager.STREAM_MUSIC
     private var testToneTrack: AudioTrack? = null
     private var toneStop: Runnable? = null
     private var exportButton: Button? = null
@@ -279,6 +279,7 @@ class DiPlayActivity : ComponentActivity() {
             userNavigatedFromCarPlay = true
         }
         enforceInterfaceSize()
+        navigationStreamType = AirPlayPersistence.loadNavigationStreamType(this)
         languagePreferenceAtCreate = AppLocale.preference(this)
         com.shilapi.xcertplay.hud.BydNavigationOutputs.onAppOpened(applicationContext)
         WheelKeyService.restoreIfNeeded(this)
@@ -4312,6 +4313,7 @@ class DiPlayActivity : ComponentActivity() {
                 setOnClickListener {
                     val previous = navigationStreamType
                     navigationStreamType = i
+                    AirPlayPersistence.saveNavigationStreamType(this@DiPlayActivity, i)
                     if (previous != i) {
                         paintChannel(previous, false)
                         paintChannel(i, true)

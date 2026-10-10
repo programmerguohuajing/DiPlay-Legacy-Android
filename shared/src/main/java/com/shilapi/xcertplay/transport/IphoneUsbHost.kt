@@ -425,7 +425,11 @@ class Iap2UsbSession internal constructor(
     private val writeLock = Any()
     private var closed = false
     private var failure: IphoneUsbException? = null
-    private var pendingRead: UsbRequest? = null
+    private var readRequest: UsbRequest? = null
+    private var readQueued = false
+    private val directReadBuffer = ByteBuffer.allocateDirect(
+        usbTransferSize(Build.VERSION.SDK_INT, USBMUX_READ_CHUNK_BYTES)
+    )
     private val readQueuePolicy = UsbReadQueuePolicy(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) USBFS_BULK_URB_CEILING_BYTES else Int.MAX_VALUE,
     )
@@ -448,61 +452,78 @@ class Iap2UsbSession internal constructor(
     fun read(timeoutMillis: Long): ByteArray? = synchronized(readLock) {
         checkOpen()
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
-        val request = UsbRequest()
-        var initialized = false
-        try {
-            if (!request.initialize(connection, inEndpoint)) {
-                throw IphoneUsbException.DeviceUnavailable(
-                    "Android could not initialize USBMUX read request (${requestDiagnostics(timeoutMillis)})",
-                )
-            }
-            initialized = true
-            val buffer = ByteBuffer.allocateDirect(usbTransferSize(Build.VERSION.SDK_INT, USBMUX_READ_CHUNK_BYTES))
-            val queueResult = synchronized(stateLock) {
+        var acceptedFallback: UsbReadQueueResult? = null
+        val request = try {
+            synchronized(stateLock) {
                 checkOpenLocked()
-                pendingRead = request
-                readQueuePolicy.queue(buffer, ::checkOpenLocked) { sharedConnection.queue(request, it) }
+                val current = readRequest ?: UsbRequest().also {
+                    if (!it.initialize(connection, inEndpoint)) {
+                        it.close()
+                        throw failSession(
+                            "Android could not initialize USBMUX read request (${requestDiagnostics(timeoutMillis)})",
+                        )
+                    }
+                    readRequest = it
+                }
+                if (!readQueued) {
+                    directReadBuffer.clear()
+                    val queueResult = readQueuePolicy.queue(directReadBuffer, ::checkOpenLocked) {
+                        sharedConnection.queue(current, it)
+                    }
+                    if (!queueResult.queued) {
+                        throw failSession(
+                            "Android could not queue USBMUX read request (${requestDiagnostics(timeoutMillis)} " +
+                                "firstBytes=${queueResult.firstBytes} fallbackBytes=${queueResult.fallbackBytes ?: "not_attempted"})",
+                        )
+                    }
+                    readQueued = true
+                    if (queueResult.fallbackBytes != null) acceptedFallback = queueResult
+                }
+                current
             }
-            if (!queueResult.queued) {
-                throw IphoneUsbException.DeviceUnavailable(
-                    "Android could not queue USBMUX read request (${requestDiagnostics(timeoutMillis)} " +
-                        "firstBytes=${queueResult.firstBytes} fallbackBytes=${queueResult.fallbackBytes ?: "not_attempted"})",
-                )
-            }
-            // The policy remembers an accepted fallback, so this event occurs once per pipe.
-            if (queueResult.fallbackBytes != null) runCatching {
+        } catch (error: IphoneUsbException) {
+            throw error
+        } catch (error: RuntimeException) {
+            throw failSession("USBMUX read failed", error)
+        }
+
+        acceptedFallback?.let { queueResult ->
+            runCatching {
                 onDiagnostic(
                     "USBMUX read queue compatibility fallback api=${Build.VERSION.SDK_INT} " +
                         "endpoint=${describeUsbEndpoint(inEndpoint)} firstBytes=${queueResult.firstBytes} " +
                         "fallbackBytes=${queueResult.fallbackBytes}",
                 )
             }
+        }
+
+        try {
             val completed = try {
                 sharedConnection.await(request, timeoutMillis)
             } catch (_: TimeoutException) {
-                drainCancelledRead(request)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    drainCancelledRead(request)
+                    readQueued = false
+                }
+                // Below Android 8 (API 26), request stays queued for the next poll because
+                // cancel() is unreliable on legacy usbfs drivers and closing an in-flight
+                // request causes SIGSEGV (Android 4.4) or NPE in dequeue (Android 5.1).
                 return@synchronized null
             }
             if (completed !== request) {
                 throw failSession("Android completed an unexpected USB request")
             }
-            val position = buffer.position()
+            readQueued = false
+            val position = directReadBuffer.position()
             if (position <= 0) return@synchronized null
             return@synchronized ByteArray(position).also {
-                buffer.flip()
-                buffer.get(it)
+                directReadBuffer.flip()
+                directReadBuffer.get(it)
             }
         } catch (error: IphoneUsbException) {
             throw error
         } catch (error: RuntimeException) {
             throw failSession("USBMUX read failed", error)
-        } finally {
-            synchronized(stateLock) {
-                if (pendingRead === request) pendingRead = null
-            }
-            if (initialized) request.cancel()
-            sharedConnection.forget(request)
-            request.close()
         }
     }
 
@@ -521,11 +542,13 @@ class Iap2UsbSession internal constructor(
         val requestToCancel = synchronized(stateLock) {
             if (closed) return
             closed = true
-            pendingRead
+            readRequest
         }
-        requestToCancel?.cancel()
+        runCatching { requestToCancel?.cancel() }
         runCatching { connection.releaseInterface(claimedInterface) }
         sharedConnection.release()
+        requestToCancel?.let(sharedConnection::forget)
+        runCatching { requestToCancel?.close() }
     }
 
     private fun checkOpen() {
@@ -538,13 +561,6 @@ class Iap2UsbSession internal constructor(
     }
 
     private fun drainCancelledRead(request: UsbRequest) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            // Below Android 8 (API 26), request.cancel() often returns false or is not supported
-            // by legacy Linux usbfs drivers (e.g. Allwinner T3 Android 4.4 / 7.1).
-            // Do not fail the session if cancel() fails.
-            runCatching { request.cancel() }
-            return
-        }
         if (!request.cancel()) {
             throw failSession("Android could not cancel timed out USBMUX read request")
         }

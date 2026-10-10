@@ -107,6 +107,27 @@ class UsbMuxIssue100RegressionTest {
         assertTrue(remainder(host).isEmpty())
     }
 
+    @Test fun leadingZeroPaddingBeforeVersionFrameInSameTransferIsAccepted() {
+        val host = host()
+        val paddedVersion = ByteArray(4) + versionReplyWithPadding.copyOf(20)
+        UsbEvidenceReplay.transfers.add(paddedVersion)
+        val frame = takeFrame(host)
+        assertEquals(20, frameLength(frame))
+        assertTrue(remainder(host).isEmpty())
+    }
+
+    @Test fun leadingZeroPaddingBeforeTcpFrameInSameTransferIsAccepted() {
+        val host = host()
+        UsbEvidenceReplay.transfers.add(versionReplyWithPadding.copyOf(20))
+        assertEquals(20, frameLength(takeFrame(host)))
+        val paddedTcp = ByteArray(4) + normalSynAck
+        UsbEvidenceReplay.transfers.add(paddedTcp)
+        val frame = takeFrame(host)
+        assertEquals(36, frameLength(frame))
+        assertArrayEquals(normalSynAck.copyOfRange(16, 36), framePayload(frame))
+        assertTrue(remainder(host).isEmpty())
+    }
+
     @Test fun allZeroUsbTransferIsDiscardedWithoutProtocolException() {
         val host = host()
         UsbEvidenceReplay.transfers.add(ByteArray(32))

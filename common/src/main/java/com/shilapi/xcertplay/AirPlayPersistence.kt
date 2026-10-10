@@ -192,9 +192,16 @@ object AirPlayPersistence {
             .apply()
     }
 
-    fun loadNavigationStreamType(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getInt(KEY_NAVIGATION_STREAM_TYPE, 14)
+    fun loadNavigationStreamType(context: Context): Int {
+        val defaultStream = if (CarHotspotSetup.isBydHeadUnit(context)) 14 else android.media.AudioManager.STREAM_MUSIC
+        val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getInt(KEY_NAVIGATION_STREAM_TYPE, defaultStream)
+        return if (!CarHotspotSetup.isBydHeadUnit(context) && saved == 14) {
+            android.media.AudioManager.STREAM_MUSIC
+        } else {
+            saved
+        }
+    }
 
     fun saveNavigationStreamType(context: Context, streamType: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

@@ -35,13 +35,13 @@ internal class UsbMuxFrameBuffer(private val diagnostic: (String) -> Unit = {}) 
             // leaves these bytes in place; a legitimate split frame must never be lost.
             if (previous != null && readU32(bytes, 0) != PROTOCOL_TCP &&
                 bytes.size < PADDING_BYTES + HEADER_BYTES) return null
-            val followingProtocol = readU32(bytes, PADDING_BYTES)
-            val followingLength = readU32(bytes, PADDING_BYTES + 4)
+            val followingProtocol = if (bytes.size >= PADDING_BYTES + 4) readU32(bytes, PADDING_BYTES) else -1
+            val followingLength = if (bytes.size >= PADDING_BYTES + 8) readU32(bytes, PADDING_BYTES + 4) else -1
             val candidateHeader = previous != null && readU32(bytes, 0) != PROTOCOL_TCP &&
-                readU32(bytes, PADDING_BYTES + 8) == CAPTURED_REPLY_MAGIC
-            val isVersionTarget = previous != null && readU32(bytes, 0) != PROTOCOL_TCP &&
+                bytes.size >= PADDING_BYTES + 12 && readU32(bytes, PADDING_BYTES + 8) == CAPTURED_REPLY_MAGIC
+            val isVersionTarget = readU32(bytes, 0) != PROTOCOL_TCP &&
                 followingProtocol == PROTOCOL_VERSION && followingLength == VERSION_BYTES &&
-                readU32(bytes, PADDING_BYTES + 8) == 2
+                bytes.size >= PADDING_BYTES + 12 && readU32(bytes, PADDING_BYTES + 8) == 2
             val validTarget = when {
                 isVersionTarget -> true
                 candidateHeader && followingProtocol == PROTOCOL_TCP &&
@@ -62,12 +62,12 @@ internal class UsbMuxFrameBuffer(private val diagnostic: (String) -> Unit = {}) 
                 }
                 else -> false
             }
-            if (previous != null && validTarget) {
+            if (validTarget) {
                 bytes = bytes.copyOfRange(PADDING_BYTES, bytes.size)
                 optionalReplyPadding = null
                 if (paddingReports++ < MAX_PADDING_REPORTS) report(
                     "USBMUX optional reply padding skipped bytes=$PADDING_BYTES " +
-                        "previousProtocol=${previous.protocol} previousLength=${previous.length} " +
+                        "previousProtocol=${previous?.protocol} previousLength=${previous?.length} " +
                         "nextProtocol=$followingProtocol nextLength=$followingLength " +
                         "lastUsbReadBytes=$lastUsbReadBytes bufferedBytes=${bytes.size}")
                 if (bytes.size < HEADER_BYTES) return null
