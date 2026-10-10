@@ -41,21 +41,29 @@ class UsbAutoConfirmService : AccessibilityService() {
             }
             val appLabel = applicationInfo.loadLabel(packageManager).toString()
             if (!isTargetPrompt(texts.joinToString(" "), appLabel)) return
-            // Only the system USB dialog's optional default checkbox may be changed.
+            // Check optional "always allow / default" checkbox on legacy & modern ROMs
             visit(root) { node ->
-                node.isCheckable && !node.isChecked && node.isEnabled &&
-                    node.viewIdResourceName == "android:id/alwaysUse" &&
+                val className = node.className?.toString().orEmpty()
+                val isCheckBox = node.isCheckable || className.contains("CheckBox", ignoreCase = true)
+                isCheckBox && !node.isChecked && node.isEnabled &&
+                    (node.viewIdResourceName == "android:id/alwaysUse" ||
+                        node.viewIdResourceName?.endsWith(":id/alwaysUse") == true ||
+                        node.viewIdResourceName?.endsWith(":id/check") == true ||
+                        node.isCheckable) &&
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             }
             val confirmed = visit(root) { node ->
                 val label = node.text?.toString()?.trim()
-                node.isEnabled && node.isClickable &&
-                    (node.viewIdResourceName == "android:id/button1" || label in CONFIRM_LABELS) &&
+                val isButton = node.className?.toString()?.contains("Button", ignoreCase = true) == true || label != null
+                node.isEnabled && node.isClickable && isButton &&
+                    (node.viewIdResourceName == "android:id/button1" ||
+                        node.viewIdResourceName?.endsWith(":id/button1") == true ||
+                        CONFIRM_LABELS.any { it.equals(label, ignoreCase = true) }) &&
                     node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             }
             if (confirmed) {
                 lastClickTime = now
-                Log.i(TAG, "Successfully auto-confirmed DiPlay USB permission dialog")
+                Log.i(TAG, "Successfully auto-confirmed DiPlay USB/VPN permission dialog")
             }
         } finally {
             @Suppress("DEPRECATION")
@@ -83,20 +91,37 @@ class UsbAutoConfirmService : AccessibilityService() {
     companion object {
         private const val TAG = "UsbAutoConfirm"
         private const val DEBOUNCE_MILLIS = 800L
-        private val SYSTEM_PACKAGES = setOf("com.android.systemui", "android")
+        private val SYSTEM_PACKAGES = setOf(
+            "com.android.systemui",
+            "android",
+            "com.android.settings",
+            "com.android.vpndialogs",
+        )
         private val USB_ACTIVITIES = setOf(
             "com.android.systemui.usb.UsbPermissionActivity",
             "com.android.systemui.usb.UsbConfirmActivity",
+            "com.android.systemui.usb.UsbResolverActivity",
+            "com.android.settings.usb.UsbPermissionActivity",
+            "com.android.vpndialogs.ConfirmDialog",
         )
-        private val CONFIRM_LABELS = setOf("确定", "允许", "OK", "Allow", "Confirm")
+        private val CONFIRM_LABELS = setOf(
+            "确定", "允许", "确认", "同意", "授权", "总是", "始终", "好的",
+            "OK", "Allow", "Confirm", "Yes", "Grant", "Authorize", "Connect", "Turn on", "Always"
+        )
 
         internal fun isSystemUsbWindow(pkg: String?, className: String?): Boolean =
             pkg in SYSTEM_PACKAGES && className in USB_ACTIVITIES
 
-        internal fun isTargetPrompt(text: String, appLabel: String): Boolean =
-            appLabel.isNotBlank() &&
-                Regex("(?<![\\p{L}\\p{N}_])${Regex.escape(appLabel)}(?![\\p{L}\\p{N}_])", RegexOption.IGNORE_CASE)
-                    .containsMatchIn(text) && text.contains("USB", ignoreCase = true)
+        internal fun isTargetPrompt(text: String, appLabel: String): Boolean {
+            if (appLabel.isBlank()) return false
+            val hasAppRef = Regex("(?<![\\p{L}\\p{N}_])${Regex.escape(appLabel)}(?![\\p{L}\\p{N}_])", RegexOption.IGNORE_CASE)
+                .containsMatchIn(text)
+            val hasTopic = text.contains("USB", ignoreCase = true) ||
+                text.contains("VPN", ignoreCase = true) ||
+                text.contains("网络连接请求", ignoreCase = true) ||
+                text.contains("Connection request", ignoreCase = true)
+            return hasAppRef && hasTopic
+        }
 
 
         fun isEnabled(context: Context): Boolean {
