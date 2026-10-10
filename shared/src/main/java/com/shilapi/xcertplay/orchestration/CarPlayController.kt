@@ -315,6 +315,20 @@ class CarPlayController(
                 "AirPlay session active controller=${session.controllerId ?: "unknown"} " +
                     "peer=${session.host}",
             )
+            if (config.transport == CarPlayTransport.WIRELESS) {
+                val output = runCatching {
+                    @Suppress("DEPRECATION")
+                    val audio = appContext.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    if (audio == null) "audioManager=unavailable" else {
+                        @Suppress("DEPRECATION")
+                        "a2dpOn=${audio.isBluetoothA2dpOn} musicActive=${audio.isMusicActive} " +
+                            "musicVolume=${audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)}/" +
+                            "${audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)}"
+                    }
+                }.getOrElse { "audioDiagnostics=${it.javaClass.simpleName}" }
+                debugLog("wireless audio route at AirPlay session start: $output; " +
+                    "OEM A2DP/MCU source selection may differ from Android routing APIs")
+            }
             uiListener?.onSessionActive(session)
         }
 
@@ -2173,8 +2187,9 @@ class CarPlayController(
 
             val ncmHostMac = ncm.hostMac ?: config.hostMac
             debugLog("ncm using hostMac=${ncmHostMac.macString()}")
-            if (!attachVpn(ncm, ncmHostMac)) {
-                throw IphoneUsbException.DeviceUnavailable("Could not attach the NCM/VPN AirPlay transport")
+            val vpnAttachError = attachVpn(ncm, ncmHostMac)
+            if (vpnAttachError != null) {
+                throw IphoneUsbException.DeviceUnavailable("Could not attach the NCM/VPN AirPlay transport: $vpnAttachError")
             }
             ncmOwnedLocally = false
             debugLog("wired NCM/VPN AirPlay transport attached")
@@ -2655,12 +2670,12 @@ class CarPlayController(
         else -> CONTROL_LOOP_TIMEOUT_MILLIS
     }
 
-    private fun attachVpn(ncm: NcmUsbBridge, hostMac: ByteArray): Boolean {
+    private fun attachVpn(ncm: NcmUsbBridge, hostMac: ByteArray): String? {
         onStatus(CarPlayStatus.AttachingNetwork)
         val service = awaitVpnService() ?: run {
             debugLog("wired VPN service bind failed")
             ncm.close()
-            return false
+            return "VPN service bind timed out or was unavailable"
         }
         debugLog("wired VPN service bound; attaching NCM transport")
         val result = try {
@@ -2678,23 +2693,23 @@ class CarPlayController(
         } catch (error: Throwable) {
             ncm.close()
             onStatus(CarPlayStatus.Failed(error.message ?: error.javaClass.simpleName))
-            return false
+            return "VPN service attach raised ${error.javaClass.simpleName}: ${error.message ?: "unknown"}"
         }
         return when (result) {
             is CarPlayVpnService.AttachResult.Started -> {
                 debugLog("wired VPN/NCM transport attach result=started")
-                true
+                null
             }
             CarPlayVpnService.AttachResult.AlreadyStarted -> {
                 debugLog("wired VPN/NCM transport attach result=already-started")
                 ncm.close()
-                false
+                "VPN/NCM attachment was already started"
             }
             is CarPlayVpnService.AttachResult.Failed -> {
                 debugLog("wired VPN/NCM transport attach result=failed ${result.message}")
                 ncm.close()
                 onStatus(CarPlayStatus.Failed(result.message))
-                false
+                result.message
             }
         }
     }
@@ -2715,6 +2730,9 @@ class CarPlayController(
 
     private fun bindVpn() {
         if (vpnBound) return
+        // A failed earlier bind may have counted down the previous latch. Reset it
+        // before each new bind or a reconnect can observe a stale completed latch.
+        vpnLatch = CountDownLatch(1)
         vpnBound = true
         try {
             val intent = Intent(appContext, CarPlayVpnService::class.java)

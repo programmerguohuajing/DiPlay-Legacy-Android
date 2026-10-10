@@ -71,6 +71,31 @@ class UsbReadQueuePolicyTest {
         assertEquals(listOf(32_768, 16_384, 8_192, 4_096, 4_096), sizes)
     }
 
+    @Test fun exact16KiBBufferFallsBackOnLegacyControllerRejection() {
+        val policy = UsbReadQueuePolicy(USBFS_BULK_URB_CEILING_BYTES)
+        val attempts = mutableListOf<Int>()
+        val buffer = ByteBuffer.allocateDirect(16_384)
+        val result = policy.queue(buffer, {}) {
+            attempts += it.remaining()
+            it.remaining() <= 4_096
+        }
+        assertTrue(result.queued)
+        assertEquals(16_384, result.firstBytes)
+        assertEquals(4_096, result.fallbackBytes)
+        assertEquals(listOf(16_384, 8_192, 4_096), attempts)
+    }
+
+    @Test fun exact16KiBTotalRejectionReportsActualFallback() {
+        val policy = UsbReadQueuePolicy(USBFS_BULK_URB_CEILING_BYTES)
+        val attempts = mutableListOf<Int>()
+        val result = policy.queue(ByteBuffer.allocateDirect(16_384), {}) {
+            attempts += it.remaining()
+            false
+        }
+        assertFalse(result.queued)
+        assertEquals(2_048, result.fallbackBytes)
+        assertEquals(listOf(16_384, 8_192, 4_096, 2_048), attempts)
+    }
     @Test fun ceilingCapsTheQueuedSizeSoPreApiPNeverExceedsTheUsbfsLimit() {
         // On API < 28 UsbRequest.queue THROWS above 16 KiB, so the cap must keep every attempt
         // within the usbfs ceiling rather than ever queueing the buffer's full remaining.

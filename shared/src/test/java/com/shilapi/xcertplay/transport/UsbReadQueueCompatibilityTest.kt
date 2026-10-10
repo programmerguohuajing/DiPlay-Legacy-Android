@@ -42,14 +42,15 @@ class UsbReadQueueCompatibilityTest {
     }
 
     @Test @Config(sdk = [24, 25, 26, 27])
-    fun legacyQueueRejectionFailsWithoutAnAmbiguousBufferRetry() {
-        UsbQueueReplay.outcomes.add(false)
+    fun legacyQueueRejectionRetriesBoundedSmallerSizesThenFails() {
+        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false))
         val pipe = pipe()
         try {
             val error = expectUnavailable { pipe.read(100) }
             assertTrue(error.message!!.contains("firstBytes=16384"))
+            assertTrue(error.message!!.contains("fallbackBytes=2048"))
         } finally { pipe.close() }
-        assertEquals(listOf(16_384), UsbQueueReplay.sizes)
+        assertEquals(listOf(16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
     }
 
     @Test fun normalUsbmuxAndNcmRequestsKeepTheirOriginalSizes() {
@@ -105,6 +106,18 @@ class UsbReadQueueCompatibilityTest {
         checkFallbackDiagnostic(diagnostics, "NCM", 32_768)
     }
 
+    @Test fun ncmAcceptsPacketAlignedNtbFollowedImmediatelyByNextHeaderWithoutPad() {
+        val frame = ByteArray(32_740) { (it * 17).toByte() }
+        val next = byteArrayOf(0x33, 0x33, 0, 0, 0, 1, 0x86.toByte(), 0xdd.toByte())
+        val padded = Ntb16Codec.build(frame, 7)
+        UsbQueueReplay.transfer = padded.copyOf(padded.size - 1) + Ntb16Codec.build(next, 8)
+        UsbQueueReplay.outcomes.addAll(listOf(false, true))
+        val ncm = ncm()
+        try {
+            assertArrayEquals(frame, ncm.recv(1_000))
+            assertArrayEquals(next, ncm.recv(1_000))
+        } finally { ncm.close() }
+    }
     @Test fun diagnosticCallbackFailureDoesNotInterruptEitherAcceptedFallback() {
         val failingDiagnostic: (String) -> Unit = { throw IllegalStateException("optional diagnostic failed") }
         UsbQueueReplay.outcomes.addAll(listOf(false, true))

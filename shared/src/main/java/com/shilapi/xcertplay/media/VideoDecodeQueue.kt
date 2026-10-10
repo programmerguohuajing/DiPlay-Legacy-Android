@@ -39,16 +39,19 @@ internal class VideoDecodeQueue(
     private val maxBytes: Int = 8 * 1024 * 1024,
 ) {
     private val jobs = LinkedBlockingQueue<VideoJob>()
+    private var pendingFrames = 0
+    private var pendingBytes = 0L
 
     @Synchronized fun offer(job: VideoJob) {
         if (job is VideoJob.Frame) {
-            val frames = jobs.filterIsInstance<VideoJob.Frame>()
-            if (frames.size >= maxFrames || frames.sumOf { it.nalus.size.toLong() } + job.nalus.size > maxBytes) {
+            if (pendingFrames >= maxFrames || pendingBytes + job.nalus.size > maxBytes) {
                 discardFrames()
                 jobs.offer(VideoJob.Resync)
             }
-            // A single oversized frame is also a lost reference chain.
+            // An oversized frame is an unusable reference chain, not retained in the queue.
             if (job.nalus.size > maxBytes) return
+            pendingFrames++
+            pendingBytes += job.nalus.size
         }
         jobs.offer(job)
     }
@@ -59,12 +62,29 @@ internal class VideoDecodeQueue(
             val item = iterator.next()
             if (item is VideoJob.Frame || item is VideoJob.Resync) iterator.remove()
         }
+        pendingFrames = 0
+        pendingBytes = 0L
     }
 
-    fun poll(timeoutMillis: Long): VideoJob? = jobs.poll(timeoutMillis, TimeUnit.MILLISECONDS)
+    // Waiting must never hold the queue monitor: USB receive callbacks enqueue video frames.
+    fun poll(timeoutMillis: Long): VideoJob? {
+        synchronized(this) { takeQueued()?.let { return it } }
+        if (timeoutMillis > 0) Thread.sleep(timeoutMillis)
+        return synchronized(this) { takeQueued() }
+    }
 
-    /** Removes and returns every queued job, for a worker that is shutting down. */
-    @Synchronized fun drain(): List<VideoJob> = ArrayList<VideoJob>().also { jobs.drainTo(it) }
+    private fun takeQueued(): VideoJob? = jobs.poll().also { job ->
+        if (job is VideoJob.Frame) {
+            pendingFrames--
+            pendingBytes -= job.nalus.size
+        }
+    }
+
+    @Synchronized fun drain(): List<VideoJob> = ArrayList<VideoJob>().also {
+        jobs.drainTo(it)
+        pendingFrames = 0
+        pendingBytes = 0L
+    }
 }
 
 /** Drain output while waiting for input: full output buffers can otherwise starve input forever. */

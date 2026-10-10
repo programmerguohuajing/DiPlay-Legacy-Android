@@ -174,6 +174,12 @@ class Iap2LinkEngine(
         if (wiredInitiator && state != State.DEAD) enterNegotiating(nowMillis)
     }
 
+    /** Some older RFCOMM peers wait for accessory synchronization instead of initiating it. */
+    fun initiateSynchronizationIfDetecting(nowMillis: Long): Boolean {
+        if (state != State.DETECTING || receive.size != 0) return false
+        enterNegotiating(nowMillis)
+        return state == State.NEGOTIATING
+    }
     /** Supplies any received byte fragment; empty fragments are harmless. */
     fun feed(bytes: ByteArray, nowMillis: Long) {
         if (state == State.DEAD || bytes.isEmpty()) return

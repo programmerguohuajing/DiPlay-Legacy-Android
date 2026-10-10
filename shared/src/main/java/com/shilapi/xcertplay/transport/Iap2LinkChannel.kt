@@ -146,10 +146,15 @@ class Iap2LinkChannel private constructor(
         val engine = Iap2LinkEngine(linkConfig)
         var sentBytes = 0L
         var receivedBytes = 0L
+        val startedAtMillis = nowMillis()
         try {
             engine.start(wiredInitiator = initiateNegotiation, nowMillis = nowMillis())
             while (!isClosing()) {
                 drainCommands(engine)
+                if (!initiateNegotiation && receivedBytes == 0L &&
+                    nowMillis() - startedAtMillis >= WIRELESS_SYNC_FALLBACK_MILLIS) {
+                    engine.initiateSynchronizationIfDetecting(nowMillis())
+                }
                 engine.advanceTime(nowMillis())
                 sentBytes += flush(engine)
                 if (!drainEvents(engine)) return
@@ -365,6 +370,7 @@ class Iap2LinkChannel private constructor(
     }
 
     companion object {
+        private const val WIRELESS_SYNC_FALLBACK_MILLIS = 1_000L
         private const val RECEIVE_CHUNK_BYTES = 8_192
         private const val RECEIVE_POLL_MILLIS = 100L
         private const val MINIMUM_RECEIVE_POLL_MILLIS = 1L

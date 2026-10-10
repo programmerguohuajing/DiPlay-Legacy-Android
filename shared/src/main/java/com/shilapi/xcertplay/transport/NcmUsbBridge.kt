@@ -215,11 +215,15 @@ class NcmUsbBridge internal constructor(
             val blockLength = readU16(buffered, 8)
             if (blockLength < 28) throw failSession("Invalid NTB16 block length $blockLength")
             val padded = blockLength % USB_PACKET_SIZE == 0
-            val wireLength = blockLength + if (padded) 1 else 0
-            if (bufferedSize < wireLength) return
-            if (padded && buffered[blockLength].toInt() != 0) {
+            if (bufferedSize < blockLength + if (padded) 1 else 0) return
+            // iOS may concatenate the next NTB header without a zero short-packet pad.
+            val hasPad = padded && buffered[blockLength].toInt() == 0
+            if (padded && !hasPad &&
+                !(bufferedSize >= blockLength + 4 && readU32(buffered, blockLength) == Ntb16Codec.NTH16_SIG)) {
+                if (bufferedSize < blockLength + 4 && buffered[blockLength].toInt() == 0x4e) return
                 throw failSession("Invalid NTB16 short-packet pad")
             }
+            val wireLength = blockLength + if (hasPad) 1 else 0
             for (frame in Ntb16Codec.parse(buffered, 0, blockLength)) enqueueFrame(frame)
             val remaining = bufferedSize - wireLength
             buffered.copyInto(buffered, 0, wireLength, bufferedSize)

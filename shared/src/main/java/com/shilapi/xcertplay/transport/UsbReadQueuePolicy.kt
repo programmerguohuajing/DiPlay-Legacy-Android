@@ -45,7 +45,7 @@ internal class UsbReadQueuePolicy(private val maxQueueBytes: Int = Int.MAX_VALUE
         if (submitUnchanged(buffer, position, firstBytes, submit)) {
             return UsbReadQueueResult(true, firstBytes)
         }
-        if (originalBytes <= COMPATIBILITY_BYTES || firstBytes <= MIN_COMPATIBILITY_BYTES) {
+        if (originalBytes < COMPATIBILITY_BYTES || firstBytes <= MIN_COMPATIBILITY_BYTES) {
             buffer.limit(originalLimit)
             return UsbReadQueueResult(false, firstBytes)
         }

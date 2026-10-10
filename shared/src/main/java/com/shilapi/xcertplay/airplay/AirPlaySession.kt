@@ -641,6 +641,13 @@ class AirPlaySession(
         if (streams != null) {
             val responseStreams = handleStreams(streams)
             debugLog("airplay SETUP response streams=$responseStreams")
+            val requestedTypes = streams.mapNotNull { asMap(it)?.get("type")?.let(::long)?.toInt() }
+            if (requestedTypes.any { it == STREAM_TYPE_MAIN_SCREEN || it == STREAM_TYPE_ALT_SCREEN } &&
+                requestedTypes.none { it == STREAM_TYPE_MAIN_AUDIO || it == STREAM_TYPE_ALT_AUDIO ||
+                    it == STREAM_TYPE_MAIN_HIGH_AUDIO || it == STREAM_TYPE_MAIN_BUFFERED_AUDIO }) {
+                debugLog("airplay video-only SETUP: no audio stream was requested by the iPhone; " +
+                    "Android AudioTrack and output routing cannot produce independent CarPlay audio yet")
+            }
             val body = BplistCodec.encode(linkedMapOf("streams" to responseStreams))
             trace("airplay SETUP response bplistHex=${body.toHex()}")
             return RtspMessage.Response(headers = mapOf("Content-Type" to PLIST_CONTENT_TYPE), body = body)
