@@ -71,6 +71,11 @@ data class AirPlayConfig(
      * iPhone pick the PCM uplink the accessory can actually send.
      */
     val microphoneOpus: Boolean = true,
+    /**
+     * Whether to offer Opus alongside PCM for audio output/playback. False on head units without an
+     * Opus decoder (e.g. Android 4.4 KitKat), so the iPhone chooses PCM instead of unsupported Opus.
+     */
+    val opusAudioOutput: Boolean = true,
     val manufacturer: String = "xcertplay",
     val model: String = "xcertplay",
     val oemLabel: String = "xcertplay",

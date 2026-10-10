@@ -232,6 +232,29 @@ class AirPlayInfoPlistTest {
     }
 
     @Test
+    fun opusIsExcludedFromOutputWhenOpusAudioOutputIsDisabled() {
+        val base = AirPlayConfig(
+            deviceName = "test",
+            deviceId = "02:00:00:00:00:02",
+            btMac = "02:00:00:00:00:02",
+            sourceVersion = "1",
+            main = AirPlayDisplayConfig(widthPixels = 800, heightPixels = 480),
+        )
+        val withOpus = AirPlayInfoPlist.build(base.copy(opusAudioOutput = true))
+        val withoutOpus = AirPlayInfoPlist.build(base.copy(opusAudioOutput = false))
+
+        val withFormats = (withOpus["audioFormats"] as List<*>)
+            .map { it as Map<*, *> }
+            .filter { (it["audioOutputFormats"] as? Int ?: 0) and 0x70000000 != 0 }
+        assertFalse(withFormats.isEmpty())
+
+        val withoutFormats = (withoutOpus["audioFormats"] as List<*>)
+            .map { it as Map<*, *> }
+            .filter { (it["audioOutputFormats"] as? Int ?: 0) and 0x70000000 != 0 }
+        assertTrue(withoutFormats.isEmpty())
+    }
+
+    @Test
     fun mainAltAndHighAudioStreamsAreDeclared() {
         val info = AirPlayInfoPlist.build(
             AirPlayConfig(

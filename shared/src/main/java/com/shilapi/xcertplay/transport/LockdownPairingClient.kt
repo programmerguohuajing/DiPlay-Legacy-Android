@@ -67,15 +67,21 @@ class LockdownPairingClient(
                             "hostCert=${it.hostCertificatePem.size} rootCert=${it.rootCertificatePem.size}",
                     )
                 }
-                Log.i(TAG, "lockdown pair attempt=$attempt")
-                val response = channel.request(pairRequest(label, record), stepTimeoutMillis(deadline))
+                val response = try {
+                    channel.request(pairRequest(label, record), stepTimeoutMillis(deadline))
+                } catch (_: IphoneUsbException.TimedOut) {
+                    pending = true
+                    null
+                }
                 checkCancelled(isCancelled)
-                when (val error = response.errorCodeOrNull()) {
-                    null -> return PairedRecord(record, response.entries["EscrowBag"].asOptionalData())
-                    "PairingDialogResponsePending" -> pending = true
-                    "UserDeniedPairing" -> throw LockdownPairingException.UserDeniedPairing
-                    "PasswordProtected" -> throw LockdownPairingException.PasswordProtected
-                    else -> throw LockdownPairingException.RemoteError(error)
+                if (response != null) {
+                    when (val error = response.errorCodeOrNull()) {
+                        null -> return PairedRecord(record, response.entries["EscrowBag"].asOptionalData())
+                        "PairingDialogResponsePending" -> pending = true
+                        "UserDeniedPairing" -> throw LockdownPairingException.UserDeniedPairing
+                        "PasswordProtected" -> throw LockdownPairingException.PasswordProtected
+                        else -> throw LockdownPairingException.RemoteError(error)
+                    }
                 }
             }
             if (pending) {
@@ -222,7 +228,7 @@ class LockdownPairingClient(
         const val RETRY_INTERVAL_MILLIS = 1_000L
         const val RETRY_CHECK_MILLIS = 100L
         const val NANOS_PER_MILLISECOND = 1_000_000L
-        const val MAXIMUM_STEP_TIMEOUT_MILLIS = 5_000L
+        const val MAXIMUM_STEP_TIMEOUT_MILLIS = 10_000L
         const val MAXIMUM_TOTAL_TIMEOUT_MILLIS = 5 * 60_000L
     }
 }
