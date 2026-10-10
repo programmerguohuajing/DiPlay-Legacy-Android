@@ -68,15 +68,14 @@ internal class VideoDecodeQueue(
 
     // Waiting must never hold the queue monitor: USB receive callbacks enqueue video frames.
     fun poll(timeoutMillis: Long): VideoJob? {
-        synchronized(this) { takeQueued()?.let { return it } }
-        if (timeoutMillis > 0) Thread.sleep(timeoutMillis)
-        return synchronized(this) { takeQueued() }
-    }
-
-    private fun takeQueued(): VideoJob? = jobs.poll().also { job ->
-        if (job is VideoJob.Frame) {
-            pendingFrames--
-            pendingBytes -= job.nalus.size
+        val job = (if (timeoutMillis > 0) jobs.poll(timeoutMillis, TimeUnit.MILLISECONDS) else jobs.poll())
+            ?: return null
+        return synchronized(this) {
+            if (job is VideoJob.Frame) {
+                pendingFrames = maxOf(0, pendingFrames - 1)
+                pendingBytes = maxOf(0L, pendingBytes - job.nalus.size)
+            }
+            job
         }
     }
 
