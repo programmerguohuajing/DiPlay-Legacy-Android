@@ -76,6 +76,8 @@ This repository starts with a clean public source snapshot. Local research, test
 ## Community & Feedback
 
 - **Issues & Discussions**: Feel free to discuss questions and issues in [GitHub Issues](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues). We will reply whenever time permits.
+- **Check Real Android OS Version**: If installation fails (e.g. "There was a problem parsing the package"), your aftermarket head unit may have a spoofed system version (such as fake Android 10/11/12 on top of real Android 4.4/5.1). You can use this head unit inspection tool provided by [@493330227-wq](https://github.com/493330227-wq) to check your genuine Android version and API level:  
+  👉 **[headunit-version-inspector](https://github.com/493330227-wq/headunit-version-inspector)**
 - **Attach Diagnostic Logs**: When reporting a specific problem, attaching detailed diagnostic logs (via **Settings → Diagnostics → Save diagnostic report**, automatically exported to USB/SD cards since v0.2.27) and environment details (head-unit model, Android version, iPhone/iOS version) is strongly recommended.
 - **Contributions Welcome**: Pull Requests (PRs) from experienced developers are warmly welcomed to help improve compatibility across various legacy automotive hardware!
 - ⭐ **Support**: If this project is helpful to you, please give it a **Star**!
