@@ -31,6 +31,27 @@ import javax.jmdns.ServiceEvent
 import javax.jmdns.ServiceInfo
 import javax.jmdns.ServiceListener
 
+/** KitKat system NSD can be present but nonfunctional; modern ROMs need interface-scoped mDNS. */
+internal fun useBundledCarPlayMdns(sdkInt: Int): Boolean =
+    sdkInt < Build.VERSION_CODES.LOLLIPOP || sdkInt > Build.VERSION_CODES.P
+
+/** Binding one address family must not lose the other when Android 4.x cannot reuse port 5353. */
+internal fun <T> bindAvailableMdnsFamilies(
+    addresses: List<InetAddress>,
+    bind: (InetAddress) -> T,
+    onFailure: (InetAddress, IOException) -> Unit,
+): List<Pair<InetAddress, T>> {
+    val bound = mutableListOf<Pair<InetAddress, T>>()
+    for (address in addresses) {
+        try {
+            bound += address to bind(address)
+        } catch (error: IOException) {
+            onFailure(address, error)
+        }
+    }
+    return bound
+}
+
 data class CarPlayBonjourEndpoint(
     val serviceName: String,
     val host: String,
@@ -289,19 +310,34 @@ class CarPlayBonjour(
                     requireNotNull(localAdvertisedAddress) {
                         "Interface mDNS requires a local advertised address"
                     }
-                    // A JmDNS instance joins only its address family's multicast group.
-                    for (address in advertisedAddresses) {
-                        val dns = JmDNS.create(address, "carplay-${config.deviceId.replace(":", "")}")
-                        interfaceMdns.add(dns)
+                    // Some Android 4.x MulticastSocket implementations bind port 5353
+                    // before enabling SO_REUSEADDR, so the second address family can
+                    // fail with EADDRINUSE even if no other process owns the port.
+                    val boundFamilies = mutableListOf<String>()
+                    val bindings = bindAvailableMdnsFamilies(
+                        advertisedAddresses,
+                        bind = { address -> JmDNS.create(address, "carplay-${config.deviceId.replace(":", "")}") },
+                        onFailure = { address, failure ->
+                            Log.w(TAG, "mDNS bind failed for " +
+                                (if (address is Inet4Address) "IPv4" else "IPv6") +
+                                "; preserving other advertised families", failure)
+                        },
+                    )
+                    // Take ownership of every successfully created socket before registering
+                    // the first service: if registration throws, cleanup must close all sockets.
+                    interfaceMdns.addAll(bindings.map { it.second })
+                    for ((address, dns) in bindings) {
                         dns.addServiceListener("$CARPLAY_CONTROL_SERVICE_TYPE.local.", interfaceListener)
                         dns.registerService(ServiceInfo.create(
                             "$AIRPLAY_SERVICE_TYPE.local.", config.deviceName, config.port,
                             0, 0, CarPlayBonjourProtocol.airPlayTxtRecords(config, identity),
                         ))
+                        boundFamilies += if (address is Inet4Address) "IPv4" else "IPv6"
                     }
-                    publishedFamilies = advertisedAddresses.joinToString(",") {
-                        if (it is Inet4Address) "IPv4" else "IPv6"
+                    if (boundFamilies.isEmpty()) {
+                        throw IOException("Interface mDNS could not bind on any advertised address")
                     }
+                    publishedFamilies = boundFamilies.joinToString(",")
                 } else {
                     registerAirPlay()
                     registrationRequested = true

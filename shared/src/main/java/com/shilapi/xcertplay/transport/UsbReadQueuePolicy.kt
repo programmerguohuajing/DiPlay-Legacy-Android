@@ -21,7 +21,7 @@ internal const val USBFS_BULK_URB_CEILING_BYTES = 16 * 1024
  *
  * Some host controllers (observed on MUSB hosts) reject not only a large read but the 16 KiB read
  * too, which previously ended the session outright. When a full-size read is rejected we therefore
- * step down a halving ladder (16K → 8K → 4K → 2K), each a whole multiple of the 512-byte bulk
+ * step down a halving ladder (16K, 8K, 4K, 2K, 1K, 512B), each a whole multiple of the 512-byte bulk
  * packet, and cache the first size the controller accepts so later reads start there. A read that
  * has an original remaining region at or below the compatibility ceiling is not laddered.
  * A large region capped by an old-platform ceiling still qualifies for smaller retries.
@@ -86,6 +86,6 @@ internal class UsbReadQueuePolicy(private val maxQueueBytes: Int = Int.MAX_VALUE
 
     private companion object {
         const val COMPATIBILITY_BYTES = 16 * 1024
-        const val MIN_COMPATIBILITY_BYTES = 2 * 1024
+        const val MIN_COMPATIBILITY_BYTES = 512
     }
 }

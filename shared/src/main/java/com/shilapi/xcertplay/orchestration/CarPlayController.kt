@@ -1349,7 +1349,9 @@ class CarPlayController(
                 // Bind discovery and its connect probe to the same AP/address family as AirPlay.
                 // The car hotspot previously used system NSD, which could resolve another interface
                 // or IPv6 while the listener/probe was bound to the AP's IPv4 address.
-                useInterfaceMdns = Build.VERSION.SDK_INT > Build.VERSION_CODES.P,
+                // Some KitKat head units have no working servicediscovery system service.
+                // Use bundled JmDNS instead of crashing in NsdManager.getMessenger().
+                useInterfaceMdns = com.shilapi.xcertplay.network.useBundledCarPlayMdns(Build.VERSION.SDK_INT),
                 onEvent = { event -> debugLog("wireless bonjour: ${event.diagnosticSummary()}") },
                 additionalAddresses = hotspotInfo.hostAddresses.filter { it != hostAddress },
             )
@@ -1428,7 +1430,7 @@ class CarPlayController(
                         ).run(
                             identification = bootstrapIdentification,
                             endpoint = endpoint,
-                            timeoutMillis = controlLoopTimeoutMillis(),
+                            timeoutMillis = WIRELESS_BOOTSTRAP_TIMEOUT_MILLIS,
                             keepAliveAfterDeadline = { keepBluetoothControlAlive(generation) },
                             beforeStartSession = { startedHotspot?.validateReady() },
                             onStartSessionSent = { watchdog.startSessionSent(it.sentAtNanos) },
@@ -1503,7 +1505,11 @@ class CarPlayController(
                         }
                         Iap2WirelessControlTerminal.TIMED_OUT ->
                             if (!wirelessActiveReported.get()) {
-                                onStatus(CarPlayStatus.ControlEnded)
+                                throw IOException("Wireless iAP2 bootstrap timeout after ${WIRELESS_BOOTSTRAP_TIMEOUT_MILLIS}ms " +
+                                    "stage=${result.stage} startSessions=${result.carPlayStartSessionsSent} " +
+                                    "wifiConfigs=${result.wifiConfigurationsSent} " +
+                                    "transportNotified=${result.transportNotificationSeen}; " +
+                                    "check iPhone Bluetooth pairing, Wi-Fi and diagnostic log")
                             }
                     }
                 } else {
@@ -2979,6 +2985,7 @@ class CarPlayController(
         private const val LEGACY_WIFI_P2P_START_TIMEOUT_MILLIS = 25_000L
         private const val PAIR_TIMEOUT_MILLIS = 5 * 60_000L
         private const val VPN_CONNECT_TIMEOUT_MILLIS = 10_000L
+        private const val WIRELESS_BOOTSTRAP_TIMEOUT_MILLIS = 90_000L
         private const val CONTROL_LOOP_TIMEOUT_MILLIS = 5 * 60_000L
         private const val LOCATION_CONTROL_LOOP_TIMEOUT_MILLIS = 24 * 60 * 60 * 1_000L
         private const val PERMISSION_POLL_INTERVAL_MILLIS = 500L

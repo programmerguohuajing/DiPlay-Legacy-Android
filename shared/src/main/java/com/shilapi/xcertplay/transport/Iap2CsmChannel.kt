@@ -232,8 +232,9 @@ class Iap2CsmChannel private constructor(
         fun openWireless(
             underlying: BlockingDuplexByteStream,
             onArtwork: (Iap2ArtworkTransfer) -> Unit = {},
+            onHandshakeProgress: (String) -> Unit = {},
         ): Iap2CsmChannel =
-            Iap2CsmChannel(Iap2LinkChannel.openWireless(underlying, onArtwork))
+            Iap2CsmChannel(Iap2LinkChannel.openWireless(underlying, onArtwork, onHandshakeProgress))
 
         /** Opens the owned iAP2 link over an AirPlay type-130 tunnel. */
         fun openTunnel(

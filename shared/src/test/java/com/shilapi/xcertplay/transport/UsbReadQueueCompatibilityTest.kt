@@ -43,14 +43,14 @@ class UsbReadQueueCompatibilityTest {
 
     @Test @Config(sdk = [24, 25, 26, 27])
     fun legacyQueueRejectionRetriesBoundedSmallerSizesThenFails() {
-        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false))
+        UsbQueueReplay.outcomes.addAll(List(6) { false })
         val pipe = pipe()
         try {
             val error = expectUnavailable { pipe.read(100) }
             assertTrue(error.message!!.contains("firstBytes=16384"))
-            assertTrue(error.message!!.contains("fallbackBytes=2048"))
+            assertTrue(error.message!!.contains("fallbackBytes=512"))
         } finally { pipe.close() }
-        assertEquals(listOf(16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
+        assertEquals(listOf(16_384, 8_192, 4_096, 2_048, 1_024, 512), UsbQueueReplay.sizes)
     }
 
     @Test fun normalUsbmuxAndNcmRequestsKeepTheirOriginalSizes() {
@@ -131,14 +131,14 @@ class UsbReadQueueCompatibilityTest {
 
     @Test fun everyLadderRejectionFailsWithEndpointApiAndAttemptedSizes() {
         val pipe = pipe()
-        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
+        UsbQueueReplay.outcomes.addAll(List(7) { false })
         try { checkQueueFailure { pipe.read(100) } } finally { pipe.close() }
-        assertEquals(listOf(65_536, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
+        assertEquals(listOf(65_536, 16_384, 8_192, 4_096, 2_048, 1_024, 512), UsbQueueReplay.sizes)
         UsbQueueReplay.reset()
         val ncm = ncm()
-        UsbQueueReplay.outcomes.addAll(listOf(false, false, false, false, false))
+        UsbQueueReplay.outcomes.addAll(List(7) { false })
         try { checkQueueFailure { readChunk(ncm) } } finally { ncm.close() }
-        assertEquals(listOf(32_768, 16_384, 8_192, 4_096, 2_048), UsbQueueReplay.sizes)
+        assertEquals(listOf(32_768, 16_384, 8_192, 4_096, 2_048, 1_024, 512), UsbQueueReplay.sizes)
     }
 
     @Test fun queueExceptionDoesNotTriggerCompatibilityRetryInEitherPipe() {
@@ -196,7 +196,7 @@ class UsbReadQueueCompatibilityTest {
         assertTrue(error.message!!.contains("api=28"))
         assertTrue(error.message!!.contains("endpoint=0x85"))
         assertTrue(error.message!!.contains("firstBytes="))
-        assertTrue(error.message!!.contains("fallbackBytes=2048"))
+        assertTrue(error.message!!.contains("fallbackBytes=512"))
     }
 
     private fun checkFallbackDiagnostic(diagnostics: List<String>, pipe: String, firstBytes: Int) {

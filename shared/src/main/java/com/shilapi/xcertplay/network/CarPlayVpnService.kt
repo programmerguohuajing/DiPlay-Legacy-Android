@@ -111,10 +111,10 @@ class CarPlayVpnService : VpnService() {
             attachStage = "VPN establish"
             val tunFd = try {
                 builder.establish()
-            } catch (error: Throwable) {
+            } catch (error: Exception) {
                 if (Build.VERSION.SDK_INT >= 21 && isUidRuleUnsupported(error)) {
                     runCatching {
-                        listener.onDebugLog("wired per-app VPN establish rejected by custom ROM netd ($error); falling back to route-only VPN")
+                        listener.onDebugLog("wired per-app VPN UID rule rejected by ROM netd: ${attachFailure(error)}; trying link-local route-only VPN")
                     }
                     val fallbackBuilder = Builder()
                         .addAddress(linkLocal, LINK_PREFIX)
@@ -122,8 +122,16 @@ class CarPlayVpnService : VpnService() {
                         .setSession(SESSION_NAME)
                         .setMtu(TUN_MTU)
                     fallbackBuilder.setBlocking(true)
-                    attachStage = "VPN establish (route-only fallback)"
-                    fallbackBuilder.establish()
+                    attachStage = "VPN establish (route-only fallback after UID rule failure)"
+                    try {
+                        fallbackBuilder.establish()
+                    } catch (fallbackError: Exception) {
+                        fallbackError.addSuppressed(error)
+                        runCatching {
+                            listener.onDebugLog("wired route-only VPN also rejected: ${attachFailure(fallbackError)}; original per-app error: ${attachFailure(error)}")
+                        }
+                        throw fallbackError
+                    }
                 } else {
                     throw error
                 }

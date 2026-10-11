@@ -58,6 +58,23 @@ class UsbCompletionRouterTest {
         assertSame(request, router.await(request, 1000))
     }
 
+    @Test fun duplicateRegistrationMustNotOverwriteAlreadyDeliveredCompletion() {
+        val queue = LinkedBlockingQueue<Any>()
+        val request = Any()
+        val other = Any()
+        val router = UsbCompletionRouter<Any> { queue.poll(it, TimeUnit.MILLISECONDS) ?: throw TimeoutException() }
+        router.register(request)
+        router.register(other)
+        queue.add(request)
+        queue.add(other)
+        assertSame(other, router.await(other, 1_000))
+        assertThrows(IllegalStateException::class.java) { router.register(request) }
+        assertSame(request, router.await(request, 1_000))
+        router.register(request)
+        queue.add(request)
+        assertSame(request, router.await(request, 1_000))
+    }
+
     @Test fun closedRequestsAreDiscardedAndPersistentRequestCanBeRequeued() {
         val queue = LinkedBlockingQueue<Any>()
         val router = UsbCompletionRouter<Any> { queue.poll(it, TimeUnit.MILLISECONDS) ?: throw TimeoutException() }

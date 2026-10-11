@@ -107,6 +107,11 @@ class Ipv6NcmBridge(
                     val naMsg = "ncm replied with solicited neighbor advertisement to peer ${ipv6.sourceMac.macString()}"
                     Log.i(TAG, naMsg)
                     runCatching { onDebugLog(naMsg) }
+                    // This bridge owns NDP for hostLinkLocal. A TUN has no Ethernet
+                    // neighbour entry: forwarding an already-answered NS into Android's
+                    // layer-3 stack can trigger a second (or malformed) NA.
+                    // Keep all other IPv6 packets on the ordinary TUN path.
+                    continue
                 }
 
                 if (!loggedInbound) {

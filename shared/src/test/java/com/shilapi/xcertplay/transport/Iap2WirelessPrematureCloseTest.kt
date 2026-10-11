@@ -24,10 +24,12 @@ class Iap2WirelessPrematureCloseTest {
             }
             override fun close() = Unit
         }
-        val link = Iap2LinkChannel.openWireless(transport)
+        val progress = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val link = Iap2LinkChannel.openWireless(transport, onHandshakeProgress = { progress += it })
         try {
             Thread.sleep(400L)
             assertTrue("expect marker and a synchronization packet", writes.any { it.size > 6 })
+            assertTrue("fallback must be visible in diagnostics", progress.any { it.contains("accessory sync fallback triggered") })
         } finally {
             runCatching { link.close() }
         }

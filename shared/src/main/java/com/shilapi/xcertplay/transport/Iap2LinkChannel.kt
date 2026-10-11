@@ -21,6 +21,7 @@ class Iap2LinkChannel private constructor(
     private val linkConfig: Iap2LinkConfig,
     private val initiateNegotiation: Boolean,
     private val onArtwork: (Iap2ArtworkTransfer) -> Unit,
+    private val onHandshakeProgress: (String) -> Unit = {},
 ) : AutoCloseable {
     private data class Command(val sessionId: Int, val payload: ByteArray)
 
@@ -147,13 +148,25 @@ class Iap2LinkChannel private constructor(
         var sentBytes = 0L
         var receivedBytes = 0L
         val startedAtMillis = nowMillis()
+        var lastProgressAtMillis = startedAtMillis
+        var recoveryReported = false
         try {
             engine.start(wiredInitiator = initiateNegotiation, nowMillis = nowMillis())
             while (!isClosing()) {
                 drainCommands(engine)
                 if (!initiateNegotiation && receivedBytes == 0L &&
                     nowMillis() - startedAtMillis >= WIRELESS_SYNC_FALLBACK_MILLIS) {
-                    engine.initiateSynchronizationIfDetecting(nowMillis())
+                    if (engine.initiateSynchronizationIfDetecting(nowMillis()) && !recoveryReported) {
+                        recoveryReported = true
+                        reportHandshakeProgress("wireless iAP2 accessory sync fallback triggered")
+                    }
+                }
+                if (!initiateNegotiation && !engine.writable() &&
+                    nowMillis() - lastProgressAtMillis >= HANDSHAKE_PROGRESS_MILLIS) {
+                    lastProgressAtMillis = nowMillis()
+                    reportHandshakeProgress("wireless iAP2 handshake state=${engine.state()} " +
+                        "sentBytes=$sentBytes receivedBytes=$receivedBytes " +
+                        "elapsedMs=${nowMillis() - startedAtMillis}")
                 }
                 engine.advanceTime(nowMillis())
                 sentBytes += flush(engine)
@@ -195,6 +208,14 @@ class Iap2LinkChannel private constructor(
             } else {
                 finish(failure)
             }
+        }
+    }
+
+    private fun reportHandshakeProgress(message: String) {
+        try {
+            onHandshakeProgress(message)
+        } catch (_: Exception) {
+            // Logging must never change the Bluetooth protocol state.
         }
     }
 
@@ -371,6 +392,7 @@ class Iap2LinkChannel private constructor(
 
     companion object {
         private const val WIRELESS_SYNC_FALLBACK_MILLIS = 150L
+        private const val HANDSHAKE_PROGRESS_MILLIS = 10_000L
         private const val RECEIVE_CHUNK_BYTES = 8_192
         private const val RECEIVE_POLL_MILLIS = 100L
         private const val MINIMUM_RECEIVE_POLL_MILLIS = 1L
@@ -407,8 +429,10 @@ class Iap2LinkChannel private constructor(
         fun openWireless(
             underlying: BlockingDuplexByteStream,
             onArtwork: (Iap2ArtworkTransfer) -> Unit = {},
+            onHandshakeProgress: (String) -> Unit = {},
         ): Iap2LinkChannel =
-            Iap2LinkChannel(underlying, WIRELESS_LINK_CONFIG, initiateNegotiation = false, onArtwork)
+            Iap2LinkChannel(underlying, WIRELESS_LINK_CONFIG, initiateNegotiation = false,
+                onArtwork, onHandshakeProgress)
                 .also { it.worker.start() }
 
         /**

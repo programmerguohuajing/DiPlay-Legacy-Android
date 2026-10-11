@@ -15,6 +15,9 @@ internal class UsbCompletionRouter<T : Any>(private val poll: (Long) -> T?) {
     private var poller: Thread? = null
 
     fun register(request: T) = lock.withLock {
+        // A second registration before await() consumes the first completion would
+        // silently overwrite true with false and lose a USBMUX/NCM notification.
+        check(!requests.containsKey(request)) { "USB request is already registered" }
         requests[request] = false
     }
 
