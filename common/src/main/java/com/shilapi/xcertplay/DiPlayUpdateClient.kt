@@ -7,7 +7,7 @@ import java.net.URL
 import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 
-/** GitHub Releases is the only update source. Never install an unverified release asset. */
+/** Prefer the Gitee release mirror, with GitHub fallback; never install unverified assets. */
 internal object DiPlayUpdateClient {
     private const val REPO = "programmerguohuajing/DiPlay-Legacy-Android"
     private const val LATEST_URL = "https://api.github.com/repos/$REPO/releases/latest"
@@ -40,10 +40,22 @@ internal object DiPlayUpdateClient {
         return false
     }
 
-    /** Unauthenticated GitHub API calls may be rate-limited on shared mobile networks. */
+    /** China-accessible Gitee is first; try GitHub only if its mirror cannot be read. */
     fun latest(installed: String): Release? = try {
+        DiPlayGiteeReleases.latest(installed) { readText(it, MAX_METADATA) }
+    } catch (giteeFailure: Exception) {
+        try {
+            latestFromGitHub(installed)
+        } catch (githubFailure: Exception) {
+            githubFailure.addSuppressed(giteeFailure)
+            throw githubFailure
+        }
+    }
+
+    /** Unauthenticated GitHub API calls may be rate-limited on shared mobile networks. */
+    private fun latestFromGitHub(installed: String): Release? = try {
         parseLatest(readText(LATEST_URL, MAX_METADATA), installed)
-    } catch (apiFailure: IOException) {
+    } catch (apiFailure: Exception) {
         // GitHub's official Atom feed has no REST API quota.
         try {
             latestFromAtom(installed)
@@ -192,11 +204,13 @@ internal object DiPlayUpdateClient {
         repeat(7) {
             val candidate = URL(next)
             val host = candidate.host.lowercase()
-            if (candidate.protocol != "https" ||
-                (host != "api.github.com" && host != "github.com" &&
-                    host != "release-assets.githubusercontent.com" &&
-                    host != "objects.githubusercontent.com")
-            ) throw IOException("Untrusted update redirect")
+            val approvedHost = host == "api.github.com" || host == "github.com" ||
+                host == "release-assets.githubusercontent.com" ||
+                host == "objects.githubusercontent.com" ||
+                host == "gitee.com" || host.endsWith(".gitee.com")
+            if (candidate.protocol != "https" || !approvedHost) {
+                throw IOException("Untrusted update redirect")
+            }
             val connection = candidate.openConnection() as HttpsURLConnection
             if (android.os.Build.VERSION.SDK_INT < 22) {
                 connection.sslSocketFactory = legacyTlsFactory
