@@ -64,11 +64,22 @@ internal class UsbRequestCompat : Closeable {
         }
     }
 
-    override fun close() {
+    /**
+     * Stops accepting new waits and returns once the worker thread is idle.
+     *
+     * A worker blocked inside native requestWait() only wakes when its queued request
+     * completes, so callers must cancel outstanding requests (see UsbCompletionRouter
+     * cancelAll) before draining. Interrupting the thread does not unblock the JNI call.
+     */
+    fun drain(timeoutMillis: Long): Boolean {
         closed = true
         inFlight?.cancel(true)
         inFlight = null
         waitExecutor.shutdownNow()
-        runCatching { waitExecutor.awaitTermination(200, TimeUnit.MILLISECONDS) }
+        return waitExecutor.awaitTermination(timeoutMillis, TimeUnit.MILLISECONDS)
+    }
+
+    override fun close() {
+        drain(200)
     }
 }

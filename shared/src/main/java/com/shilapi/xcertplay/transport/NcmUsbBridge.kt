@@ -159,7 +159,7 @@ class NcmUsbBridge internal constructor(
             readRequest
         }
         // Wakes a reader blocked in requestWait(); it then observes the closed state.
-        runCatching { requestToClose?.cancel() }
+        val cancelled = runCatching { requestToClose?.cancel() }.getOrNull() == true
         statusThread?.let { thread ->
             thread.interrupt()
             try {
@@ -176,9 +176,26 @@ class NcmUsbBridge internal constructor(
             }
         }
         runCatching { legacyRestore?.invoke() }
+        // Android 4.x: a cancelled URB is reaped by the wait worker asynchronously.
+        // Freeing the request before that completion hands freed memory to REAPURB
+        // and libc aborts. Wait for the completion; if it is not observed on legacy
+        // Android, leak the request instead of crashing the process.
+        var reaped = false
+        if (requestToClose != null && cancelled) {
+            reaped = try {
+                sharedConnection.await(requestToClose, REQUEST_DRAIN_TIMEOUT_MILLIS)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
         sharedConnection.release()
         requestToClose?.let(sharedConnection::forget)
-        runCatching { requestToClose?.close() }
+        if (requestToClose == null || reaped || !cancelled ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        ) {
+            runCatching { requestToClose?.close() }
+        }
     }
 
     private fun drainStatus(endpoint: UsbEndpoint) {
@@ -445,6 +462,7 @@ class NcmUsbBridge internal constructor(
         private const val MAX_QUEUED_BYTES = 1 shl 20
         private const val MAX_CONSECUTIVE_WRITE_FAILURES = 25
         private const val NANOS_PER_MILLISECOND = 1_000_000L
+        private const val REQUEST_DRAIN_TIMEOUT_MILLIS = 2_000L
 
         private const val ALT_SETTING_ATTEMPTS = 5
         private const val ALT_SETTING_RETRY_MILLIS = 100L

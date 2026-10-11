@@ -2,6 +2,7 @@ package com.shilapi.xcertplay.transport
 
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbRequest
+import android.util.Log
 import java.nio.ByteBuffer
 
 /**
@@ -46,12 +47,24 @@ internal class SharedUsbDeviceConnection private constructor(
         check(references >= 0) { "USB device connection released too many times" }
         if (references == 0) {
             closed = true
-            usbCompat.close()
+            // Android 4.x: the wait worker can be blocked inside native requestWait().
+            // Freeing the connection under it (native_close frees the usb_device) makes
+            // REAPURB return freed memory and libc aborts (SIGABRT in the wait thread).
+            // Cancel every queued request so the blocked wait completes, wait for the
+            // worker to go idle, and only then free the connection.
+            completions.cancelAll { request -> runCatching { request.cancel() } }
+            val drained = usbCompat.drain(WORKER_DRAIN_TIMEOUT_MILLIS)
+            if (!drained) {
+                Log.w(TAG, "USB wait worker did not go idle within ${WORKER_DRAIN_TIMEOUT_MILLIS}ms; closing the connection anyway")
+            }
             connection.close()
         }
     }
 
     companion object {
+        private const val TAG = "xcertplay-usb"
+        private const val WORKER_DRAIN_TIMEOUT_MILLIS = 2_000L
+
         fun own(connection: UsbDeviceConnection): SharedUsbDeviceConnection =
             SharedUsbDeviceConnection(connection)
     }

@@ -2080,12 +2080,16 @@ class CarPlayController(
         // though the CarPlay configuration is active; usbfs then reports ENOENT.
         val sharedConnection = usbSession.retainConnectionForNcm()
         debugLog("ncm sharing USBMUX UsbDeviceConnection")
+        // The async UsbRequest path needs the platform requestWait(timeout) overload or
+        // the API 24/25 worker. Android 4.x (Dalvik) runs synchronous bulk reads, exactly
+        // like the vendor stack: its UsbRequest JNI queues a global ref per queue() and
+        // frees requests through REAPURB, which aborts the process on any lifecycle slip.
         return NcmUsbBridge.open(
             sharedConnection = sharedConnection,
             function = function,
             expectedConfiguration = configuration.id,
             vendorId = device.vendorId,
-            useAsyncRead = true,
+            useAsyncRead = Build.VERSION.SDK_INT >= ASYNC_USB_READ_MIN_SDK,
             onDiagnostic = ::connectionDiagnostic,
         )
     }
@@ -2963,6 +2967,8 @@ class CarPlayController(
     companion object {
         private const val ENABLE_PHONE_DIAGNOSTIC_CAPTURE = false
         const val CONNECTION_DIAGNOSTIC_PREFIX = "CONNECTION_DIAGNOSTIC"
+        // Android 4.x uses synchronous USB bulk reads; see openNcm().
+        private const val ASYNC_USB_READ_MIN_SDK = Build.VERSION_CODES.N
         // Indices in the telephony HID report (AirPlayHid.telephonyDescriptor).
         private const val TELEPHONY_HOOK_SWITCH = 1
         private const val TELEPHONY_DROP = 3

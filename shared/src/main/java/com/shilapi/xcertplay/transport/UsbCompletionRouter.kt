@@ -23,6 +23,11 @@ internal class UsbCompletionRouter<T : Any>(private val poll: (Long) -> T?) {
         condition.signalAll()
     }
 
+    /** Cancels every registered request; on legacy Android this unblocks the wait worker. */
+    fun cancelAll(cancel: (T) -> Unit) = lock.withLock {
+        requests.keys.toList().forEach { request -> runCatching { cancel(request) } }
+    }
+
     fun await(request: T, timeoutMillis: Long): T {
         val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis.coerceAtLeast(1))
         lock.withLock {

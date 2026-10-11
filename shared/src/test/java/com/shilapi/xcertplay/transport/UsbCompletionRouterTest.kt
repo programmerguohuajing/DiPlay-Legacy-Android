@@ -72,4 +72,23 @@ class UsbCompletionRouterTest {
             assertSame(active, router.await(active, 1000))
         }
     }
+
+    @Test fun cancelAllTouchesOnlyStillRegisteredRequests() {
+        val router = UsbCompletionRouter<Any> { null }
+        val cancelled = mutableListOf<Any>()
+        val queued = Any()
+        val forgotten = Any()
+        router.register(queued)
+        router.register(forgotten)
+        router.forget(forgotten)
+        router.cancelAll { cancelled.add(it) }
+        assertEquals(listOf(queued), cancelled)
+    }
+
+    @Test fun cancelAllOnEmptyRegistryIsANoOp() {
+        val router = UsbCompletionRouter<Any> { null }
+        val cancelled = mutableListOf<Any>()
+        router.cancelAll { cancelled.add(it) }
+        assertTrue(cancelled.isEmpty())
+    }
 }

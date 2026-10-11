@@ -430,6 +430,7 @@ class Iap2UsbSession internal constructor(
     private val directReadBuffer = ByteBuffer.allocateDirect(
         usbTransferSize(Build.VERSION.SDK_INT, USBMUX_READ_CHUNK_BYTES)
     )
+    private val syncReadBuffer = ByteArray(USBFS_BULK_URB_CEILING_BYTES)
     private val readQueuePolicy = UsbReadQueuePolicy(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) USBFS_BULK_URB_CEILING_BYTES else Int.MAX_VALUE,
     )
@@ -458,6 +459,9 @@ class Iap2UsbSession internal constructor(
     fun read(timeoutMillis: Long): ByteArray? = synchronized(readLock) {
         checkOpen()
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
+        if (Build.VERSION.SDK_INT < ASYNC_USB_READ_MIN_SDK) {
+            return@synchronized readSynchronously(timeoutMillis)
+        }
         var acceptedFallback: UsbReadQueueResult? = null
         val request = try {
             synchronized(stateLock) {
@@ -550,11 +554,47 @@ class Iap2UsbSession internal constructor(
             closed = true
             readRequest
         }
-        runCatching { requestToCancel?.cancel() }
+        val cancelled = runCatching { requestToCancel?.cancel() }.getOrNull() == true
         runCatching { connection.releaseInterface(claimedInterface) }
+        // Android 4.x: a cancelled URB is reaped by the wait worker asynchronously.
+        // Freeing the request before that completion hands freed memory to REAPURB
+        // and libc aborts. Wait for the completion; if it is not observed on legacy
+        // Android, leak the request instead of crashing the process.
+        var reaped = false
+        if (requestToCancel != null && cancelled) {
+            reaped = try {
+                sharedConnection.await(requestToCancel, CANCEL_DRAIN_TIMEOUT_MILLIS)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
         sharedConnection.release()
         requestToCancel?.let(sharedConnection::forget)
-        runCatching { requestToCancel?.close() }
+        if (requestToCancel == null || reaped || !cancelled ||
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        ) {
+            runCatching { requestToCancel?.close() }
+        }
+    }
+
+    /**
+     * Android 4.x reads run synchronously, mirroring the NCM sync path: the async UsbRequest
+     * machinery aborts Dalvik on lifecycle slips (each queue() pins a JNI global ref that only
+     * a REAPURB+dequeue releases, and freed/pending URB mixups hand garbage to REAPURB).
+     * The control channel is low-rate, so the pinned-array cost of bulkTransfer is negligible.
+     */
+    private fun readSynchronously(timeoutMillis: Long): ByteArray? {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        while (true) {
+            val remaining = ((deadline - System.nanoTime()) / 1_000_000).toInt().coerceIn(1, Int.MAX_VALUE)
+            val transferred = try {
+                connection.bulkTransfer(inEndpoint, syncReadBuffer, syncReadBuffer.size, remaining)
+            } catch (error: RuntimeException) {
+                throw failSession("USBMUX read failed", error)
+            }
+            if (transferred > 0) return syncReadBuffer.copyOf(transferred)
+        }
     }
 
     private fun checkOpen() {
@@ -597,6 +637,8 @@ class Iap2UsbSession internal constructor(
     private companion object {
         const val USBMUX_READ_CHUNK_BYTES = 65_536
         const val CANCEL_DRAIN_TIMEOUT_MILLIS = 1_000L
+        // Android 4.x reads synchronously; see readSynchronously().
+        const val ASYNC_USB_READ_MIN_SDK = Build.VERSION_CODES.N
     }
 }
 
