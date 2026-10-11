@@ -87,6 +87,51 @@ class AirPlaySocketBinderTest {
         }
     }
 
+    @Test fun ipv6WildcardLadderFallsThroughRejectedCandidatesToNextAddress() {
+        val candidates = listOf(
+            InetAddress.getByName("::"),
+            InetAddress.getByName("0.0.0.0"),
+        )
+        val result = AirPlaySocketBinder.bindAcrossAddresses(
+            "AirPlay timing", candidates,
+            { FakeSocket() },
+            { _, endpoint ->
+                // Emulate vendor kernels that reject any IPv6 wildcard datagram bind.
+                if (endpoint.address is java.net.Inet6Address) {
+                    throw java.net.SocketException("Can't bind to a link-local address without a scope id: /::")
+                }
+            },
+        )
+        assertFalse(result.closed)
+        result.close()
+    }
+
+    @Test fun ipv6WildcardLadderExhaustionIsBoundedAndReportsTheStage() {
+        val error = assertThrows(IOException::class.java) {
+            AirPlaySocketBinder.bindAcrossAddresses(
+                "AirPlay timing", listOf(InetAddress.getByName("::")),
+                { FakeSocket() },
+                { _, _ -> throw BindException("EADDRINUSE") },
+            )
+        }
+        assertTrue(error.message!!.contains("AirPlay timing"))
+        assertTrue(error.message!!.contains("wildcard"))
+    }
+
+    @Test fun ipv6WildcardCandidatesCoverRawAnyScopedReferenceAndLiteral() {
+        val reference = InetAddress.getByName("fe80:0:0:0:0:0:0:2")
+        val candidates = AirPlaySocketBinder.wildcardCandidates(reference)
+        assertEquals(4, candidates.size)
+        assertEquals(reference, candidates[1])
+        assertTrue(candidates.any { it is java.net.Inet4Address })
+    }
+
+    @Test fun ipv4ReferenceKeepsTheSingleWildcardCandidate() {
+        val candidates = AirPlaySocketBinder.wildcardCandidates(InetAddress.getByName("127.0.0.1"))
+        assertEquals(1, candidates.size)
+        assertTrue(candidates.single() is java.net.Inet4Address)
+    }
+
     private class FakeSocket : Closeable {
         var closed = false
         override fun close() { closed = true }
