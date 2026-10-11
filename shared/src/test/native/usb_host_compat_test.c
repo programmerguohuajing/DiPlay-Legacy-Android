@@ -20,10 +20,13 @@ static int disconnected;
 static int restored;
 static int userspace_owner;
 static int disconnect_error;
+static int reset_calls;
+static int reset_error;
 
 static void reset(void) {
     initial_error = final_error = config_calls = disconnected = restored = 0;
     userspace_owner = disconnect_error = 0;
+    reset_calls = reset_error = 0;
 }
 
 static int mock_ioctl(int fd, unsigned long request, void *argument) {
@@ -49,6 +52,11 @@ static int mock_ioctl(int fd, unsigned long request, void *argument) {
             return 0;
         }
         if (operation->ioctl_code == USBDEVFS_CONNECT) { restored++; return 0; }
+    }
+    if (request == USBDEVFS_RESET) {
+        reset_calls++;
+        if (reset_error) { errno = reset_error; return -1; }
+        return 0;
     }
     assert(0 && "Unexpected ioctl");
     return -1;
@@ -79,6 +87,15 @@ int main(void) {
     initial_error = EBUSY;
     disconnect_error = EPERM;
     assert(configure() == EPERM && config_calls == 1 && disconnected == 0);
-    puts("PASS: six native USB configuration/driver recovery scenarios (mocked ioctls)");
+    reset();
+    assert(Java_com_shilapi_xcertplay_transport_LegacyUsbHostNative_resetDevice(NULL, NULL, 42) == 0 &&
+           reset_calls == 1);
+    reset();
+    reset_error = ENODEV;
+    assert(Java_com_shilapi_xcertplay_transport_LegacyUsbHostNative_resetDevice(NULL, NULL, 42) == ENODEV &&
+           reset_calls == 1);
+    assert(Java_com_shilapi_xcertplay_transport_LegacyUsbHostNative_resetDevice(NULL, NULL, -1) == EINVAL &&
+           reset_calls == 0);
+    puts("PASS: nine native USB configuration/driver/reset recovery scenarios (mocked ioctls)");
     return 0;
 }

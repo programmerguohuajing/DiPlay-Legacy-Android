@@ -14,6 +14,8 @@ import android.util.Log
  */
 internal object LegacyUsbHostCompat {
     private const val USBFS_EBUSY = 16
+    private const val USBFS_EPROTO = 71
+
     data class ConfigurationResult(
         val selected: Boolean,
         val errno: Int?,
@@ -21,6 +23,29 @@ internal object LegacyUsbHostCompat {
     )
     data class ClaimResult(val claimed: Boolean, val errno: Int?)
     data class SelectResult(val selected: Boolean, val errno: Int?)
+
+    /**
+     * Port-level USBDEVFS_RESET for a wedged iPhone that answers no control transfers
+     * (usbfs errno EPROTO, activeConfig=unknown). The device re-enumerates like a
+     * physical re-plug; the caller must rediscover and reopen it afterwards.
+     * Returns the reset errno, or null when no native fd was usable.
+     */
+    fun resetDevice(connection: UsbDeviceConnection, onDiagnostic: (String) -> Unit = {}): Int? {
+        val fd = runCatching { connection.fileDescriptor }.getOrDefault(-1)
+        if (fd < 0) {
+            Log.w(TAG, "usbfs reset unavailable: invalid device fd")
+            return null
+        }
+        val errno = try {
+            LegacyUsbHostNative.resetDevice(fd)
+        } catch (error: LinkageError) {
+            Log.w(TAG, "usbfs reset unavailable", error)
+            return null
+        }
+        Log.i(TAG, "usbfs reset device errno=$errno")
+        onDiagnostic("usb device reset requested errno=$errno")
+        return errno
+    }
 
     fun activeConfiguration(connection: UsbDeviceConnection): Int? {
         val value = ByteArray(1)
@@ -104,6 +129,11 @@ internal object LegacyUsbHostCompat {
         Log.i(TAG, "usbfs set-configuration config=$target errno=$errno active=${active ?: "unknown"}")
         onDiagnostic("usb configuration native target=$target errno=$errno after=${active ?: "unknown"}")
         val ok = (errno == 0 || (errno == USBFS_EBUSY && before == target && active == target)) && (active == null || active == target)
+        if (!ok && errno == USBFS_EPROTO) {
+            // A wedged iPhone answers no control transfers (descriptor reads return
+            // unknown too). Reset the port so the next discovery sees a sane device.
+            resetDevice(connection, onDiagnostic)
+        }
         return ConfigurationResult(ok, errno, active)
     }
 
@@ -158,4 +188,5 @@ private object LegacyUsbHostNative {
     external fun setConfiguration(fileDescriptor: Int, configurationId: Int): Int
     external fun forceClaim(fileDescriptor: Int, interfaceId: Int): Int
     external fun setInterface(fileDescriptor: Int, interfaceId: Int, alternateSetting: Int): Int
+    external fun resetDevice(fileDescriptor: Int): Int
 }

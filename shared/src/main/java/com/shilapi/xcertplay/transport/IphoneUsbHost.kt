@@ -442,6 +442,12 @@ class Iap2UsbSession internal constructor(
             connection.bulkTransfer(outEndpoint, data, offset, count, timeout)
         }
         if (transferred != data.size) {
+            // A -1 bulk transfer means the device stopped responding (wedged USB stack,
+            // typically after an abrupt teardown). Reset the port so the next discovery
+            // sees a re-enumerated, sane device instead of failing every attempt.
+            if (transferred < 0) {
+                runCatching { LegacyUsbHostCompat.resetDevice(connection, onDiagnostic) }
+            }
             throw IphoneUsbException.DeviceUnavailable(
                 "USBMUX write transferred $transferred of ${data.size} bytes",
             )

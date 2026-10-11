@@ -72,6 +72,23 @@ Java_com_shilapi_xcertplay_transport_LegacyUsbHostNative_setInterface(
     return errno != 0 ? errno : EIO;
 }
 
+/* Returns 0 when the port reset completed, otherwise the final errno. A reset makes
+ * the device re-enumerate exactly like a physical unplug/replug, unwedging iPhones
+ * that stopped answering control transfers (usbfs errno EPROTO). */
+JNIEXPORT jint JNICALL
+Java_com_shilapi_xcertplay_transport_LegacyUsbHostNative_resetDevice(
+        JNIEnv *env, jobject self, jint file_descriptor) {
+    (void) env;
+    (void) self;
+
+    if (file_descriptor < 0) return EINVAL;
+
+    if (ioctl(file_descriptor, USBDEVFS_RESET) == 0) {
+        return 0;
+    }
+    return errno != 0 ? errno : EIO;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_shilapi_xcertplay_transport_LegacyUsbHostNative_setConfiguration(
         JNIEnv *env, jobject self, jint file_descriptor, jint configuration_id) {

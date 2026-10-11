@@ -84,6 +84,17 @@ class LegacyUsbConfigurationTest {
         assertEquals(1, result.activeConfiguration)
     }
 
+    @Test fun protocolErrorAttemptsPortResetBeforeFailingTheAttempt() {
+        var nativeCalls = 0
+        val result = LegacyUsbHostCompat.selectConfiguration(connection, configuration) { _, _ ->
+            nativeCalls++
+            71
+        }
+        assertFalse(result.selected)
+        assertEquals(71, result.errno)
+        assertEquals(1, nativeCalls)
+    }
+
     @Test fun matchingPhoneReadbackCannotHideFailedKernelSelection() {
         state.frameworkActive = 6
         var calls = 0
