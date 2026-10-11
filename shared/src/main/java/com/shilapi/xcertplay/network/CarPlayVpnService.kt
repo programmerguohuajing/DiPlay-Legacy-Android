@@ -115,9 +115,14 @@ class CarPlayVpnService : VpnService() {
             runCatching { listener.onDebugLog("wired VPN TUN established address=$linkLocal mtu=$TUN_MTU") }
             if (Build.VERSION.SDK_INT < 21) LegacyTunBlocking.enable(tunFd)
 
-            val ipv6Bridge = Ipv6NcmBridge(ncm, tunFd, hostMac, linkLocal) { error ->
-                onTransportError(generation, listener, error)
-            }
+            val ipv6Bridge = Ipv6NcmBridge(
+                ncm = ncm,
+                tun = tunFd,
+                hostMac = hostMac,
+                hostLinkLocal = linkLocal,
+                onDebugLog = { line -> runCatching { listener.onDebugLog(line) } },
+                onError = { error -> onTransportError(generation, listener, error) },
+            )
             attachStage = "NCM IPv6 bridge startup"
             ipv6Bridge.start()
             bridge = ipv6Bridge

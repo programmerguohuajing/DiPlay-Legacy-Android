@@ -8,8 +8,9 @@ import android.os.Build
  * Whether this head unit can decode Opus for CarPlay audio playback.
  *
  * Android guarantees an Opus decoder in MediaCodec from Android 5.0 (API 21), but Android 4.4.2
- * (API 19) lacks built-in Opus decoding. On units without Opus decoder support, AirPlay advertising
- * must omit Opus so that the iPhone sends uncompressed PCM or AAC-LC instead.
+ * (API 19) lacks built-in Opus decoding. Note that Apple Wireless CarPlay protocol strictly mandates
+ * Opus (0x70000000) to be advertised in audioFormats (type 100 default); omitting it causes iOS to
+ * refuse wireless audio stream negotiation and route audio through iPhone speakers.
  */
 object OpusDecoderSupport {
     fun isAvailable(): Boolean = try {

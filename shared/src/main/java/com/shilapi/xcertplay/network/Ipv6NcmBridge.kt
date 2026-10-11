@@ -26,6 +26,7 @@ class Ipv6NcmBridge(
     private val hostMac: ByteArray,
     /** Link-local IPv6 address assigned to the Android TUN side (e.g. "fe80::2"). */
     private val hostLinkLocal: String,
+    private val onDebugLog: (String) -> Unit = {},
     private val onError: (Throwable) -> Unit,
 ) : Closeable {
     init {
@@ -86,11 +87,9 @@ class Ipv6NcmBridge(
                 peerMac = ipv6.sourceMac
                 if (!loggedInbound) {
                     loggedInbound = true
-                    Log.i(
-                        TAG,
-                        "ncm first inbound ipv6 bytes=${ipv6.payloadLength} " +
-                            "peer=${ipv6.sourceMac.macString()}",
-                    )
+                    val inMsg = "ncm first inbound ipv6 bytes=${ipv6.payloadLength} peer=${ipv6.sourceMac.macString()}"
+                    Log.i(TAG, inMsg)
+                    runCatching { onDebugLog(inMsg) }
                 }
                 if (inboundLogBudget > 0) {
                     inboundLogBudget--
@@ -142,10 +141,9 @@ class Ipv6NcmBridge(
                 }
                 if (!loggedOutbound) {
                     loggedOutbound = true
-                    Log.i(
-                        TAG,
-                        "ncm first outbound ipv6 bytes=$length destination=${mac.macString()} multicast=${multicastMac != null}",
-                    )
+                    val outMsg = "ncm first outbound ipv6 bytes=$length destination=${mac.macString()} multicast=${multicastMac != null}"
+                    Log.i(TAG, outMsg)
+                    runCatching { onDebugLog(outMsg) }
                 }
                 val frame = EthernetIpv6Codec.build(hostMac, mac, ipv6)
                 ncm.send(frame, WRITE_TIMEOUT_MILLIS)
@@ -234,7 +232,9 @@ class Ipv6NcmBridge(
             val dstMac = byteArrayOf(0x33, 0x33, 0, 0, 0, 0x01)
             val frame = EthernetIpv6Codec.build(hostMac, dstMac, ipv6)
             ncm.send(frame, WRITE_TIMEOUT_MILLIS)
-            Log.i(TAG, "ncm sent unsolicited neighbor advertisement for $hostLinkLocal")
+            val naMsg = "ncm sent unsolicited neighbor advertisement for $hostLinkLocal"
+            Log.i(TAG, naMsg)
+            runCatching { onDebugLog(naMsg) }
         } catch (error: Exception) {
             Log.w(TAG, "ncm unsolicited NA send failed: ${error.message}")
         }
