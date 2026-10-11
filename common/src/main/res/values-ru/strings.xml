@@ -312,7 +312,9 @@
     <string name="s_1_open_car_hotspot_settings_turn_the_hotspot_on_and_sele">1. Откройте настройки точки доступа автомобиля, включите её и выберите 5 ГГц, если доступно.\n2. Точно скопируйте ниже её имя и пароль.\n3. Оставляйте точку доступа включённой при подключении. DiPlay передаёт данные по Bluetooth; iPhone подключится автоматически.</string>
     <string name="s_2_pair_your_iphone">2 · Свяжите iPhone</string>
     <string name="s_300_ms_default">300 мс · по умолчанию</string>
+    <string name="s_15_fps_lightest_load">15 кадров/с · минимальная нагрузка</string>
     <string name="s_30_fps_lighter_load">30 кадров/с · меньшая нагрузка</string>
+    <string name="s_45_fps_balanced">45 кадров/с · баланс</string>
     <string name="s_3_connect">3 · Подключитесь</string>
     <string name="s_3_tap_check_and_enable_below_this_enables_the_cluster_ma">3. Нажмите «Проверить и включить» ниже. Это включит карту комбинации и автоматическое следование теме. Активный сеанс CarPlay переподключится один раз. После этого можно отключить компьютер.</string>
     <string name="s_500_ms">500 мс</string>

@@ -26,8 +26,9 @@ class CarPlayVideoSurfaceTest {
     @Test fun smoothVideoDelayCoversThreeFramesPlusAMargin() {
         assertEquals(90, smoothVideoDelayMillis(60))
         assertEquals(140, smoothVideoDelayMillis(30))
+        assertEquals(240, smoothVideoDelayMillis(15))
         assertEquals(90, smoothVideoDelayMillis(120)) // clamped to the 60 fps the stream tops out at
-        assertEquals(140, smoothVideoDelayMillis(0))
+        assertEquals(240, smoothVideoDelayMillis(0)) // clamped to the 15 fps floor
     }
 
     @Test fun replacingTextureDetachesBeforeReleaseAndDoesNotReleaseHolderSurface() {

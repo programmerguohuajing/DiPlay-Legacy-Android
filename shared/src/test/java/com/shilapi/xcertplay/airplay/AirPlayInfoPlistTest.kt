@@ -59,7 +59,7 @@ class AirPlayInfoPlistTest {
                 main = AirPlayDisplayConfig(
                     widthPixels = 1280,
                     heightPixels = 720,
-                    fps = 37,
+                    fps = 52,
                     widthPhysicalMm = 125,
                 ),
                 rightHandDrive = true,
@@ -72,7 +72,7 @@ class AirPlayInfoPlistTest {
         assertEquals(true, info["rightHandDrive"])
         assertEquals("Example", info["manufacturer"])
         assertEquals("HeadUnit", info["model"])
-        assertEquals(35, display["maxFPS"])
+        assertEquals(45, display["maxFPS"])
         assertEquals(125, display["widthPhysical"])
         assertEquals(70, display["heightPhysical"])
     }

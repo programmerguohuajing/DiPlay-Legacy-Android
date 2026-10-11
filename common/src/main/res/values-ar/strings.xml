@@ -312,7 +312,9 @@
     <string name="s_1_open_car_hotspot_settings_turn_the_hotspot_on_and_sele">1. افتح إعدادات نقطة اتصال السيارة، وشغّل نقطة الاتصال واختر 5 GHz إن توفر.\n2. انسخ الاسم وكلمة المرور أدناه كما هما تماماً.\n3. أبقِ نقطة اتصال السيارة مُشغّلة عند الاتصال. يرسل DiPlay البيانات عبر البلوتوث؛ وينضم iPhone تلقائياً.</string>
     <string name="s_2_pair_your_iphone">2 · اقرن iPhone الخاص بك</string>
     <string name="s_300_ms_default">300 مللي ثانية · الافتراضي</string>
+    <string name="s_15_fps_lightest_load">15 إطاراً/ث · أقل حمل</string>
     <string name="s_30_fps_lighter_load">30 إطاراً/ث · حمل أخف</string>
+    <string name="s_45_fps_balanced">45 إطاراً/ث · متوازن</string>
     <string name="s_3_connect">3 · اتصل</string>
     <string name="s_3_tap_check_and_enable_below_this_enables_the_cluster_ma">3. اضغط «تحقق وفعّل» أدناه. يفعّل ذلك خريطة المجموعة واتباع السمة تلقائياً. ستعيد جلسة CarPlay النشطة الاتصال مرة واحدة. يمكنك بعد ذلك فصل الحاسوب.</string>
     <string name="s_500_ms">500 مللي ثانية</string>

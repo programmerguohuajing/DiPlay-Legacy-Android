@@ -324,7 +324,9 @@
     <string name="s_2_4_ghz" tools:ignore="MissingTranslation">2.4 GHz</string>
     <string name="s_2_pair_your_iphone">2 · Pair your iPhone</string>
     <string name="s_300_ms_default">300 ms · default</string>
+    <string name="s_15_fps_lightest_load">15 fps · lightest load</string>
     <string name="s_30_fps_lighter_load">30 fps · lighter load</string>
+    <string name="s_45_fps_balanced">45 fps · balanced</string>
     <string name="s_3_connect">3 · Connect</string>
     <string name="s_3_tap_check_and_enable_below_this_enables_the_cluster_ma">3. Tap Check and enable below. This enables the cluster map and automatic theme following. An active CarPlay session reconnects once. You can then disconnect the computer.</string>
     <string name="s_500_ms">500 ms</string>

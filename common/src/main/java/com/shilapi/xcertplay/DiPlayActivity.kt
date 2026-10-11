@@ -1390,7 +1390,14 @@ class DiPlayActivity : ComponentActivity() {
                 { AirPlayPersistence.loadDisplayScalePercent(this) }, reconnects = true,
                 save = { AirPlayPersistence.saveDisplayScalePercent(this, it) },
             )
-            choice(card, getString(R.string.frame_rate), listOf(getString(R.string.s_30_fps_lighter_load), getString(R.string.s_60_fps_smoother_motion)), if (AirPlayPersistence.loadFps(this) == 60) 1 else 0) { AirPlayPersistence.saveFps(this, if (it == 1) 60 else 30) }
+            choice(card, getString(R.string.frame_rate), listOf(
+                getString(R.string.s_15_fps_lightest_load),
+                getString(R.string.s_30_fps_lighter_load),
+                getString(R.string.s_45_fps_balanced),
+                getString(R.string.s_60_fps_smoother_motion),
+            ), when (AirPlayPersistence.loadFps(this)) {
+                15 -> 0; 45 -> 2; 60 -> 3; else -> 1
+            }) { AirPlayPersistence.saveFps(this, listOf(15, 30, 45, 60)[it]) }
             carPlayDockControl(card)
             addSystemBarControls(
                 hideTopBar = AirPlayPersistence.loadHideTopBar(this),

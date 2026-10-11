@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.airplay.AirPlayDisplaySettings
 import com.shilapi.xcertplay.media.CarPlayVideoLayout
 import kotlin.math.roundToInt
 
@@ -35,7 +36,8 @@ internal data class CarPlaySurfaceBounds(val left: Int, val top: Int, val width:
  * (p90 69-77 ms at about 56 fps, runs A1/A2 in docs/SMOOTH_WIRELESS.md), so it starts at three frame
  * intervals plus 40 ms: 90 ms at 60 fps.
  */
-internal fun smoothVideoDelayMillis(fps: Int): Int = 40 + 3_000 / fps.coerceIn(30, 60)
+internal fun smoothVideoDelayMillis(fps: Int): Int =
+    40 + 3_000 / fps.coerceIn(AirPlayDisplaySettings.MIN_FPS, AirPlayDisplaySettings.MAX_FPS)
 
 /**
  * A retained background session can be adopted only when its sink's pacing matches the video view this

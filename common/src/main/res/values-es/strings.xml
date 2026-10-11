@@ -312,7 +312,9 @@
     <string name="s_1_open_car_hotspot_settings_turn_the_hotspot_on_and_sele">1. Abre los ajustes del punto de acceso del coche, actívalo y selecciona 5 GHz si está disponible.\n2. Copia abajo su nombre y contraseña exactamente.\n3. Deja el punto de acceso del coche activado al conectarte. DiPlay envía los datos por Bluetooth; tu iPhone se une automáticamente.</string>
     <string name="s_2_pair_your_iphone">2 · Empareja tu iPhone</string>
     <string name="s_300_ms_default">300 ms · predeterminado</string>
+    <string name="s_15_fps_lightest_load">15 img/s · carga mínima</string>
     <string name="s_30_fps_lighter_load">30 img/s · carga más ligera</string>
+    <string name="s_45_fps_balanced">45 img/s · equilibrado</string>
     <string name="s_3_connect">3 · Conéctate</string>
     <string name="s_3_tap_check_and_enable_below_this_enables_the_cluster_ma">3. Toca «Comprobar y activar» abajo. Esto activa el mapa del cuadro y el seguimiento automático del tema. Una sesión de CarPlay activa se reconectará una vez. Después puedes desconectar el ordenador.</string>
     <string name="s_500_ms">500 ms</string>

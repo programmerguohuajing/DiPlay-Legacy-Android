@@ -323,7 +323,9 @@
     <string name="s_2_4_ghz">2.4 GHz</string>
     <string name="s_2_pair_your_iphone">2 · 配对你的 iPhone</string>
     <string name="s_300_ms_default">300 毫秒 · 默认</string>
+    <string name="s_15_fps_lightest_load">15 帧/秒 · 负载最小</string>
     <string name="s_30_fps_lighter_load">30 帧/秒 · 减轻负载</string>
+    <string name="s_45_fps_balanced">45 帧/秒 · 均衡</string>
     <string name="s_3_connect">3 · 连接</string>
     <string name="s_3_tap_check_and_enable_below_this_enables_the_cluster_ma">3. 点击下方“检查并启用”。这将启用仪表盘地图和自动主题跟随。正在进行的 CarPlay 会话会重新连接一次，之后即可断开电脑。</string>
     <string name="s_500_ms">500 毫秒</string>
