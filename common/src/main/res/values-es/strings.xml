@@ -653,4 +653,6 @@
     <string name="settings_car_bluetooth_mac_dialog_message">Introduce la dirección MAC de Bluetooth del coche (ej. AA:BB:CC:DD:EE:FF). Búscala en iPhone Ajustes → Bluetooth → (i) o en los ajustes del coche.</string>
     <string name="settings_car_bluetooth_mac_clear">Automático / Borrar</string>
     <string name="settings_car_bluetooth_mac_invalid">Introduce una dirección MAC hexadecimal válida de 12 dígitos.</string>
+    <string name="settings_harman_fullscreen_experimental">Pantalla completa Harman (experimental)</string>
+    <string name="settings_harman_fullscreen_experimental_description">Permite que CarPlay ocupe el panel lateral original en unidades Harman compatibles. Se aplica al abrir de nuevo la ventana de CarPlay; otros firmwares podrían mostrarse incorrectamente.</string>
 </resources>

@@ -718,4 +718,6 @@
     <string name="report_usb_location">USB隨身碟：%1$s</string>
     <string name="report_usb_copy_unavailable">USB副本：找不到可寫入的USB隨身碟</string>
     <string name="report_usb_copy_paths">其他儲存位置：\n%1$s</string>
+    <string name="settings_harman_fullscreen_experimental">Harman 車機全螢幕（實驗性）</string>
+    <string name="settings_harman_fullscreen_experimental_description">讓 CarPlay 佔用受支援 Harman 車機的原廠側欄區域。下次開啟 CarPlay 視窗時生效；其他韌體可能顯示異常。</string>
 </resources>

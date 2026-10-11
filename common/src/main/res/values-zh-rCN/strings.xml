@@ -718,4 +718,6 @@
     <string name="report_usb_location">U盘：%1$s</string>
     <string name="report_usb_copy_unavailable">U盘副本：未找到可写U盘</string>
     <string name="report_usb_copy_paths">另外保存到：\n%1$s</string>
+    <string name="settings_harman_fullscreen_experimental">哈曼车机全屏（实验性）</string>
+    <string name="settings_harman_fullscreen_experimental_description">让 CarPlay 占用受支持哈曼车机的原厂侧栏区域。下次打开 CarPlay 窗口时生效；其他固件可能显示异常。</string>
 </resources>

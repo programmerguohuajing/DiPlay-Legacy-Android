@@ -653,4 +653,6 @@
     <string name="settings_car_bluetooth_mac_dialog_message">Введите собственный MAC-адрес Bluetooth автомобиля (например AA:BB:CC:DD:EE:FF). Его можно найти в iPhone Настройки → Bluetooth → (i) или в настройках автомобиля.</string>
     <string name="settings_car_bluetooth_mac_clear">Авто / Очистить</string>
     <string name="settings_car_bluetooth_mac_invalid">Пожалуйста, введите корректный 12-значный шестнадцатеричный MAC-адрес.</string>
+    <string name="settings_harman_fullscreen_experimental">Полный экран Harman (экспериментально)</string>
+    <string name="settings_harman_fullscreen_experimental_description">Позволяет CarPlay занять область штатной боковой панели на совместимых устройствах Harman. Применяется при следующем открытии окна CarPlay; на других прошивках возможны ошибки отображения.</string>
 </resources>

@@ -390,6 +390,8 @@ class CarPlayHostActivity : ComponentActivity() {
     private var sessionDock: CarPlayDock? = null
     private var hideTopBar = true
     private var hideBottomBar = true
+    private var harmanFullscreenEnabled = false
+    private var harmanFullscreenApplied = false
     private var safeAreaDrawOutside = true
     private var locationReportingEnabled = false
     private var locationPermissionAvailable = false
@@ -671,6 +673,7 @@ class CarPlayHostActivity : ComponentActivity() {
         rightHandDrive = AirPlayPersistence.loadRightHandDrive(this)
         hideTopBar = AirPlayPersistence.loadHideTopBar(this)
         hideBottomBar = AirPlayPersistence.loadHideBottomBar(this)
+        harmanFullscreenEnabled = AirPlayPersistence.loadHarmanFullscreen(this)
         safeAreaDrawOutside = AirPlayPersistence.loadSafeAreaDrawOutside(this)
         locationPermissionAvailable = hasFineLocationPermission()
         loadConnectionSettings()
@@ -902,9 +905,13 @@ class CarPlayHostActivity : ComponentActivity() {
         if (!menuOpen) {
             val savedHideTopBar = AirPlayPersistence.loadHideTopBar(this)
             val savedHideBottomBar = AirPlayPersistence.loadHideBottomBar(this)
-            systemBarsChanged = hideTopBar != savedHideTopBar || hideBottomBar != savedHideBottomBar
+            val savedHarmanFullscreen = AirPlayPersistence.loadHarmanFullscreen(this)
+            systemBarsChanged = hideTopBar != savedHideTopBar ||
+                hideBottomBar != savedHideBottomBar ||
+                harmanFullscreenEnabled != savedHarmanFullscreen
             hideTopBar = savedHideTopBar
             hideBottomBar = savedHideBottomBar
+            harmanFullscreenEnabled = savedHarmanFullscreen
         }
         maybeStartCarPlay()
         applyFullscreenMode()
@@ -5097,6 +5104,17 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun applyFullscreenMode() {
         val multiWindow = isMultiWindowActive()
+        if (harmanFullscreenEnabled) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            // Apply the OEM-specific bit last; the standard insets controller does not preserve it.
+            HarmanFullscreenCompat.apply(window)
+            harmanFullscreenApplied = true
+            return
+        }
+        if (harmanFullscreenApplied) {
+            HarmanFullscreenCompat.clear(window)
+            harmanFullscreenApplied = false
+        }
         val hideTop = hideTopBar && !multiWindow
         val hideBottom = hideBottomBar && !multiWindow
         WindowCompat.setDecorFitsSystemWindows(window, !(hideTop && hideBottom))

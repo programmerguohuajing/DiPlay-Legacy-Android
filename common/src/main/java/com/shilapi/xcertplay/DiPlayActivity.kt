@@ -1410,6 +1410,11 @@ class DiPlayActivity : ComponentActivity() {
         }
         filteredSection(content, SettingsSection.EXPERIMENTAL_DISPLAY,
             getString(R.string.settings_experimental_display), R.drawable.ic_dp_display) { card ->
+            toggle(card, getString(R.string.settings_harman_fullscreen_experimental),
+                getString(R.string.settings_harman_fullscreen_experimental_description),
+                AirPlayPersistence.loadHarmanFullscreen(this)) { enabled ->
+                AirPlayPersistence.saveHarmanFullscreen(this, enabled)
+            }
             toggle(card, getString(R.string.split_screen_areas), getString(R.string.split_screen_areas_description),
                 SplitScreenSettings.enabled(this)) {
                 SplitScreenSettings.setEnabled(this, it)
