@@ -413,6 +413,13 @@ class CarPlayHostActivity : ComponentActivity() {
     private var awaitingWirelessPermissions = false
     private var awaitingLocationPermission = false
     private var vpnReady = false
+    /**
+     * Issue #109: set when the system VPN consent dialog cannot be shown
+     * (com.android.vpndialogs missing on stripped head-unit ROMs). Without consent,
+     * VpnService.establish() always fails with "Cannot create interface" — proceeding
+     * anyway only produces an infinite retry loop with a cryptic error.
+     */
+    private var vpnConsentUnavailable = false
     private var hotspotStatus = HotspotStatus(state = "off")
     private var menuOpen = false
     private var latestStage = "Preparing CarPlay"
@@ -586,6 +593,7 @@ class CarPlayHostActivity : ComponentActivity() {
             displayManager?.registerDisplayListener(clusterDisplayListener, mainHandler)
         }
         initializeSessionLog()
+        installCrashDiagnostics()
         lastConfiguration = Configuration(resources.configuration)
         darkMode = savedInstanceState?.getBoolean("carplay_night_active")
             ?: nightModeOrNull(resources.configuration.uiMode) ?: false
@@ -744,17 +752,20 @@ class CarPlayHostActivity : ComponentActivity() {
             try {
                 vpnConsent.launch(consent)
             } catch (e: ActivityNotFoundException) {
+                // Issue #109: the VPN consent dialog is missing on this ROM. Consent can
+                // never be granted, so establish() will always fail — fail loudly instead
+                // of entering an infinite "Cannot create interface" retry loop.
                 Log.w(TAG, "VPN confirmation dialog not found on device (com.android.vpndialogs missing)", e)
-                appendLog("VPN dialog unavailable (com.android.vpndialogs missing), proceeding")
+                appendLog("VPN dialog unavailable (com.android.vpndialogs missing); VPN consent cannot be granted on this head unit")
                 awaitingVpnConsent = false
-                vpnReady = true
-                maybeStartCarPlay()
+                vpnConsentUnavailable = true
+                setStatus(getString(R.string.vpn_consent_unavailable))
             } catch (e: SecurityException) {
                 Log.w(TAG, "VPN confirmation dialog launch permission denied", e)
-                appendLog("VPN dialog launch denied, proceeding")
+                appendLog("VPN dialog launch denied; VPN consent cannot be granted on this head unit")
                 awaitingVpnConsent = false
-                vpnReady = true
-                maybeStartCarPlay()
+                vpnConsentUnavailable = true
+                setStatus(getString(R.string.vpn_consent_unavailable))
             }
         }
     }
@@ -1381,6 +1392,7 @@ class CarPlayHostActivity : ComponentActivity() {
         fallbackVideoBounds = null
         sessionLog?.append("Activity destroyed")
         sessionLog?.close()
+        if (crashDiagnosticLog === sessionLog) crashDiagnosticLog = null
         sessionLog = null
         super.onDestroy()
     }
@@ -5021,6 +5033,7 @@ class CarPlayHostActivity : ComponentActivity() {
         message.contains("socket", true) || message.contains("RFCOMM", true) ->
             getString(R.string.your_iphone_isn_t_available_unlock_it_and_check_bluetooth)
         message.contains("Bluetooth adapter is unavailable", true) -> getString(R.string.bluetooth_adapter_unavailable)
+        message.contains("Bluetooth is turned off", true) -> getString(R.string.enable_the_car_s_bluetooth_and_pair_your_iphone_first)
         message.contains("busy", true) || message.contains("EBUSY", true) -> getString(R.string.usb_iphone_busy_or_occupied)
         message.contains("permission was not granted", true) -> getString(R.string.usb_iphone_permission_not_granted)
         message.contains("unsupported", true) || message.contains("not supported", true) -> getString(R.string.this_head_unit_may_not_support_wireless_carplay_try_a_usb)
@@ -5071,6 +5084,37 @@ class CarPlayHostActivity : ComponentActivity() {
             )
         }
         sessionLog = activeLog
+        crashDiagnosticLog = activeLog
+    }
+
+    /**
+     * Records uncaught exceptions into the diagnostic log before the process dies, so
+     * crash-class issues can be triaged from the exported report without adb. The previous
+     * default handler still runs, preserving the normal crash flow. See issue #106.
+     */
+    private fun installCrashDiagnostics() {
+        if (Thread.getDefaultUncaughtExceptionHandler() is DiPlayCrashHandler) return
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler(DiPlayCrashHandler(previous))
+    }
+
+    private class DiPlayCrashHandler(
+        private val next: Thread.UncaughtExceptionHandler?,
+    ) : Thread.UncaughtExceptionHandler {
+        private val reported = AtomicBoolean(false)
+
+        override fun uncaughtException(thread: Thread, error: Throwable) {
+            if (reported.compareAndSet(false, true)) {
+                runCatching {
+                    val trace = error.stackTraceToString().lineSequence().take(40).joinToString("\n")
+                    crashDiagnosticLog?.append(
+                        "FATAL thread=${thread.name} " +
+                            "${error.javaClass.name}: ${error.message}\n$trace",
+                    )
+                }
+            }
+            runCatching { next?.uncaughtException(thread, error) }
+        }
     }
 
     private fun refreshLogView(nowMillis: Long) {
@@ -5193,6 +5237,12 @@ class CarPlayHostActivity : ComponentActivity() {
         const val CONTROLLER_CLOSE_TIMEOUT_MILLIS = 4_000L
         const val AUDIO_CAPTURE_MARKER = "audio-capture.enabled"
         const val AUDIO_CAPTURE_DIRECTORY = "audio-captures"
+        /**
+         * Process-global target for [DiPlayCrashHandler]. Kept off the activity instance so the
+         * default uncaught-exception handler never retains a destroyed activity. See issue #106.
+         */
+        @Volatile
+        private var crashDiagnosticLog: SessionLogFile? = null
         const val PROTOCOL_TRACE_PREFIX = "TRACE "
         const val SETTINGS_SWIPE_DISTANCE_DP = 72
         const val SETTINGS_SWIPE_DIRECTION_RATIO = 1.15f

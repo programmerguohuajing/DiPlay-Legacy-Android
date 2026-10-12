@@ -22,6 +22,7 @@ class Iap2LinkChannel private constructor(
     private val initiateNegotiation: Boolean,
     private val onArtwork: (Iap2ArtworkTransfer) -> Unit,
     private val onHandshakeProgress: (String) -> Unit = {},
+    private val handshakeProgressMillis: Long = HANDSHAKE_PROGRESS_MILLIS,
 ) : AutoCloseable {
     private data class Command(val sessionId: Int, val payload: ByteArray)
 
@@ -161,12 +162,11 @@ class Iap2LinkChannel private constructor(
                         reportHandshakeProgress("wireless iAP2 accessory sync fallback triggered")
                     }
                 }
-                if (!initiateNegotiation && !engine.writable() &&
-                    nowMillis() - lastProgressAtMillis >= HANDSHAKE_PROGRESS_MILLIS) {
+                if (!initiateNegotiation && !isLinkReady() &&
+                    nowMillis() - lastProgressAtMillis >= handshakeProgressMillis) {
                     lastProgressAtMillis = nowMillis()
-                    reportHandshakeProgress("wireless iAP2 handshake state=${engine.state()} " +
-                        "sentBytes=$sentBytes receivedBytes=$receivedBytes " +
-                        "elapsedMs=${nowMillis() - startedAtMillis}")
+                    reportHandshakeProgress(handshakeProgressMessage(
+                        engine, sentBytes, receivedBytes, startedAtMillis, nowMillis()))
                 }
                 engine.advanceTime(nowMillis())
                 sentBytes += flush(engine)
@@ -218,6 +218,8 @@ class Iap2LinkChannel private constructor(
             // Logging must never change the Bluetooth protocol state.
         }
     }
+
+    private fun isLinkReady(): Boolean = synchronized(lock) { ready }
 
     private fun drainCommands(engine: Iap2LinkEngine) {
         while (engine.writable()) {
@@ -445,6 +447,39 @@ class Iap2LinkChannel private constructor(
         ): Iap2LinkChannel =
             Iap2LinkChannel(underlying, WIRED_LINK_CONFIG, initiateNegotiation = true, onArtwork)
                 .also { it.worker.start() }
+
+        /**
+         * Test-only wireless opener with an injectable handshake-diagnostic interval.
+         * Production keeps the 10s [HANDSHAKE_PROGRESS_MILLIS] cadence.
+         */
+        internal fun openWirelessForTest(
+            underlying: BlockingDuplexByteStream,
+            onHandshakeProgress: (String) -> Unit = {},
+            handshakeProgressMillis: Long,
+        ): Iap2LinkChannel =
+            Iap2LinkChannel(underlying, WIRELESS_LINK_CONFIG, initiateNegotiation = false,
+                onArtwork = {}, onHandshakeProgress, handshakeProgressMillis)
+                .also { it.worker.start() }
+
+        /**
+         * Periodic wireless bootstrap diagnostic. It is printed while the link is not ready,
+         * regardless of [Iap2LinkEngine.writable]: against a silent peer the engine can stay
+         * writable forever, which previously suppressed exactly the evidence (sent/received
+         * byte counts and the unacknowledged window) needed to tell "accessory still has data
+         * to send" apart from "sent but never acknowledged". See issue #94.
+         */
+        internal fun handshakeProgressMessage(
+            engine: Iap2LinkEngine,
+            sentBytes: Long,
+            receivedBytes: Long,
+            startedAtMillis: Long,
+            nowMillis: Long,
+        ): String =
+            "wireless iAP2 handshake state=${engine.state()} " +
+                "writable=${engine.writable()} " +
+                "unacked=${engine.unacknowledgedCount()} unackedBytes=${engine.unacknowledgedBytes()} " +
+                "sentBytes=$sentBytes receivedBytes=$receivedBytes " +
+                "elapsedMs=${nowMillis - startedAtMillis}"
 
         private fun nowMillis(): Long = System.nanoTime() / NANOS_PER_MILLISECOND
     }

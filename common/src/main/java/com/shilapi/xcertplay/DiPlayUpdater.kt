@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
  * Download and OS installation always require user confirmation.
  */
 internal class DiPlayUpdater(private val activity: DiPlayActivity) {
+    init { DiPlayUpdateClient.configure(activity) }
     private val prefs = activity.getSharedPreferences("diplay_updates", Context.MODE_PRIVATE)
     private val worker = Executors.newSingleThreadExecutor { job ->
         Thread(job, "diplay-updater").apply { isDaemon = true }

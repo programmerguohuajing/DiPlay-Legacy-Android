@@ -46,6 +46,8 @@ internal class MicrophoneUplink(
     @Volatile private var effects: List<AudioEffect> = emptyList()
     @Volatile private var echoCanceller: CallEchoCanceller? = null
     private var thread: Thread? = null
+    /** The audio source actually used by the current recorder; null before start. */
+    @Volatile private var usedSource: Int? = null
 
     fun start(): Boolean {
         if (!running.compareAndSet(false, true)) return true
@@ -68,7 +70,14 @@ internal class MicrophoneUplink(
         }
 
         val source = when (config.audioType) {
-            "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+            // Issue #102: if VOICE_COMMUNICATION proved silent-broken on this device,
+            // fall back to MIC for telephony uplinks instead of capturing zeroes forever.
+            "telephony" -> if (voiceCommunicationSilentBroken) {
+                Log.i(TAG, "microphone telephony using MIC (VOICE_COMMUNICATION silent-broken on this device)")
+                MediaRecorder.AudioSource.MIC
+            } else {
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION
+            }
             "speechrecognition" -> MediaRecorder.AudioSource.VOICE_RECOGNITION
             else -> MediaRecorder.AudioSource.MIC
         }
@@ -110,6 +119,7 @@ internal class MicrophoneUplink(
         }
 
         recorder = nextRecorder
+        usedSource = source
         socket = nextSocket
         opusEncoder = nextEncoder
         return try {
@@ -322,6 +332,7 @@ internal class MicrophoneUplink(
     }
 
     private fun sendFrame(socket: DatagramSocket, counters: MicrophoneCounters, frame: ByteArray) {
+        stats.frameSilent(frame.all { it == 0.toByte() })
         val bodies = if (config.codec == AudioCodecKind.OPUS) {
             opusEncoder?.encode(frame).orEmpty()
         } else {
@@ -391,6 +402,21 @@ internal class MicrophoneUplink(
             release()
             return
         }
+        // Issue #102: if a telephony uplink on VOICE_COMMUNICATION never captured any
+        // non-silent audio, the source is broken on this device — remember so the next
+        // telephony uplink uses MIC instead of repeating the silent capture.
+        if (config.audioType == "telephony" &&
+            usedSource == MediaRecorder.AudioSource.VOICE_COMMUNICATION &&
+            !voiceCommunicationSilentBroken &&
+            stats.neverReceivedAudio() &&
+            stats.silentFrameCount() >= BROKEN_SILENCE_FRAMES
+        ) {
+            voiceCommunicationSilentBroken = true
+            val msg = "microphone telephony VOICE_COMMUNICATION captured only silence" +
+                " (${stats.silentFrameCount()} frames); future telephony uplinks will use MIC"
+            Log.w(TAG, msg)
+            onDiagnostic(msg)
+        }
         try {
             recorder?.stop()
         } catch (_: Exception) {
@@ -445,6 +471,14 @@ internal class MicrophoneUplink(
         const val CLOSE_JOIN_MILLIS = 500L
         const val ECHO_TAIL_MILLIS = 250
         const val ECHO_REFERENCE_LEAD_NS = 30_000_000L
+        /**
+         * Issue #102: set when a telephony uplink on VOICE_COMMUNICATION captured nothing
+         * but silence (e.g. GKUI head units whose driver yields zeroes for that source).
+         * Later telephony uplinks skip the broken source and use MIC directly.
+         */
+        @Volatile var voiceCommunicationSilentBroken = false
+        /** Minimum silent frames before declaring VOICE_COMMUNICATION broken (~4s at 20ms). */
+        const val BROKEN_SILENCE_FRAMES = 200L
     }
 }
 

@@ -141,12 +141,20 @@ class Iap2LinkEngine(
 
     private var markerDeadlineMillis: Long? = null
     private var synchronizationDeadlineMillis: Long? = null
+    /** Issue #94: SYN retransmit count; the link dies if the peer never answers. */
+    private var syncAttempts = 0
     private var sendAcknowledgementDeadlineMillis: Long? = null
     private var receiveAcknowledgementDeadlineMillis: Long? = null
 
     fun state(): State = state
 
     fun writable(): Boolean = writable
+
+    /** Number of packets already sent but not yet acknowledged by the peer. */
+    fun unacknowledgedCount(): Int = unacknowledged.size
+
+    /** Payload bytes already sent but not yet acknowledged by the peer. */
+    fun unacknowledgedBytes(): Long = unacknowledged.sumOf { it.payload.size.toLong() }
 
     fun peerSynchronization(): SynchronizationPayload = peerSynchronization
 
@@ -225,9 +233,17 @@ class Iap2LinkEngine(
                 synchronizationDeadlineMillis?.let { it <= nowMillis } == true -> {
                     synchronizationDeadlineMillis = null
                     if (state == State.NEGOTIATING) {
-                        sendSynchronization()
-                        if (state != State.DEAD) {
-                            synchronizationDeadlineMillis = nowMillis + SYNCHRONIZATION_RESEND_MILLIS
+                        syncAttempts++
+                        // Issue #94: iPhone silently ignoring SYNs (e.g. T3 wireless) used to
+                        // retransmit forever. Fail fast so the session can retry with a fresh
+                        // RFCOMM connection instead of hanging in "waiting for iAP2".
+                        if (syncAttempts > MAX_SYNC_ATTEMPTS) {
+                            die("iAP2 link SYN unanswered after $syncAttempts attempts; peer not responding on RFCOMM")
+                        } else {
+                            sendSynchronization()
+                            if (state != State.DEAD) {
+                                synchronizationDeadlineMillis = nowMillis + SYNCHRONIZATION_RESEND_MILLIS
+                            }
                         }
                     }
                 }
@@ -320,6 +336,7 @@ class Iap2LinkEngine(
     private fun enterNegotiating(nowMillis: Long) {
         state = State.NEGOTIATING
         markerDeadlineMillis = null
+        syncAttempts = 0
         sendSynchronization()
         if (state != State.DEAD) {
             synchronizationDeadlineMillis = nowMillis + SYNCHRONIZATION_RESEND_MILLIS
@@ -659,6 +676,8 @@ class Iap2LinkEngine(
         private const val LINK_START_HIGH: Byte = 0xff.toByte()
         private const val LINK_START_LOW: Byte = 0x5a
         private const val CONTROL_SYNCHRONIZE = 0x80
+        /** Issue #94: max SYN retransmits before declaring the peer dead (~10s at 500ms). */
+        private const val MAX_SYNC_ATTEMPTS = 20
         private const val CONTROL_ACKNOWLEDGEMENT = 0x40
         private const val CONTROL_EXTENDED_ACKNOWLEDGEMENT = 0x20
         private const val CONTROL_RESET = 0x10

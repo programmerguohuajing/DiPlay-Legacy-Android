@@ -11,6 +11,9 @@ import java.math.BigInteger
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 /** Identity of one CarPlay audio stream: the stream type plus its CarPlay audio type. */
 data class AudioStreamId(val type: Int, val audioType: String)
@@ -86,6 +89,18 @@ class CarPlayMediaEngine(
     private val pendingIapTunnels = ConcurrentHashMap<AirPlaySession, PendingIapTunnel>()
     private val videoSettingsChannels = ConcurrentHashMap<AirPlaySession, VideoSettingsChannel>()
     private val bufferedStreams = ConcurrentHashMap<AirPlaySession, BufferedStream>()
+    /**
+     * A screen stream ending no longer kills the control session at once: the iPhone often
+     * re-establishes just the video stream with a fresh SETUP after a transient stall. Each
+     * entry reaps its session after [SCREEN_REAP_GRACE_MILLIS] unless a new SETUP cancels it.
+     * See issue #106.
+     */
+    private val pendingScreenReaps = ConcurrentHashMap<AirPlaySession, ScheduledFuture<*>>()
+    private val screenReapScheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "xcertplay-screen-reap").apply { isDaemon = true }
+    }
+    /** Test seam: production uses [SCREEN_REAP_GRACE_MILLIS]. */
+    internal var screenReapGraceMillis: Long = SCREEN_REAP_GRACE_MILLIS
 
     private class BufferedStream(val stream: BufferedAudioStream, val connectionId: Any?)
 
@@ -138,20 +153,50 @@ class CarPlayMediaEngine(
         val port = screen.listen(
             object : ScreenStream.Listener by currentScreenListener(type, sink, isCurrent = { streams[streamKey] === screen }) {
                 override fun onClosed(cause: Throwable?) {
-                    Log.w(
-                        TAG,
-                        "screen stream ended type=$type reason=${cause?.message ?: "peer EOF"}",
-                    )
+                    val reason = cause?.message ?: "peer EOF"
+                    Log.w(TAG, "screen stream ended type=$type reason=$reason")
+                    session.logDebug("screen stream ended type=$type reason=$reason")
                     if (streams.remove(streamKey, screen)) {
                         sink.onScreenStreamActive(type, false)
                     }
-                    session.close()
+                    if (!session.isClosed) {
+                        // A single video stream dying (stall, keyframe loss, transient USB
+                        // hiccup) must not nuke the healthy control session: give the iPhone
+                        // a grace period to re-SETUP the stream before tearing down.
+                        session.logDebug(
+                            "screen stream ended; waiting ${screenReapGraceMillis}ms " +
+                                "for re-SETUP before closing the control session",
+                        )
+                        scheduleScreenReap(session)
+                    } else {
+                        cancelScreenReap(session)
+                    }
                 }
             },
         )
+        cancelScreenReap(session)
         streams.put(streamKey, screen)?.close()
         sink.onScreenStreamActive(type, true)
         return port
+    }
+
+    private fun scheduleScreenReap(session: AirPlaySession) {
+        cancelScreenReap(session)
+        val graceMillis = screenReapGraceMillis
+        pendingScreenReaps[session] = screenReapScheduler.schedule({
+            pendingScreenReaps.remove(session)
+            if (!session.isClosed) {
+                session.logDebug(
+                    "screen stream did not recover within ${graceMillis}ms; " +
+                        "closing the control session",
+                )
+                session.close()
+            }
+        }, graceMillis, TimeUnit.MILLISECONDS)
+    }
+
+    private fun cancelScreenReap(session: AirPlaySession) {
+        pendingScreenReaps.remove(session)?.cancel(false)
     }
 
     override fun onAudio(session: AirPlaySession, type: Int, stream: Map<String, Any?>): Map<String, Any?>? {
@@ -479,6 +524,7 @@ class CarPlayMediaEngine(
     }
 
     override fun onSessionClosed(session: AirPlaySession) {
+        cancelScreenReap(session)
         clearPendingIapTunnel(session)
         retireBuffered(session)
         videoSettingsChannels.remove(session)?.close()
@@ -612,6 +658,12 @@ class CarPlayMediaEngine(
         const val TAG = "xcertplay-usb"
         const val STREAM_TYPE_MAIN_SCREEN = 110
         const val STREAM_TYPE_ALT_SCREEN = 111
+        /**
+         * How long to wait for the iPhone to re-SETUP a screen stream after it ends before
+         * the control session is torn down. Covers transient video stalls without turning
+         * every hiccup into a full reconnect. See issue #106.
+         */
+        const val SCREEN_REAP_GRACE_MILLIS = 5_000L
         const val STREAM_TYPE_MAIN_AUDIO = 100
         const val STREAM_TYPE_DATA = 130
         const val DATASTREAM_OUTPUT_KEY = "DataStream-Output-Encryption-Key"

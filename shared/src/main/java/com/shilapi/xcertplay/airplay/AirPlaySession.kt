@@ -491,6 +491,14 @@ class AirPlaySession(
                             "airplay handler failed ${request.method} ${request.path} cseq=$cseq",
                             error,
                         )
+                        // Issue #73: Log.e only reaches logcat, but users export the diagnostic
+                        // report — without this line a SETUP handler failure shows up in the
+                        // report as a misleading "peer EOF". Keep the line DiagnosticRedactor-safe
+                        // (no name=/body=/hex=) and uiVisible so it reaches the report.
+                        debugLog(
+                            "airplay handler failed ${request.method} ${request.path}: " +
+                                "${error.javaClass.simpleName}: ${error.message?.take(200)}",
+                        )
                         RtspMessage.Response(status = 500)
                     }
                     debugLog(
@@ -645,8 +653,8 @@ class AirPlaySession(
             if (requestedTypes.any { it == STREAM_TYPE_MAIN_SCREEN || it == STREAM_TYPE_ALT_SCREEN } &&
                 requestedTypes.none { it == STREAM_TYPE_MAIN_AUDIO || it == STREAM_TYPE_ALT_AUDIO ||
                     it == STREAM_TYPE_MAIN_HIGH_AUDIO || it == STREAM_TYPE_MAIN_BUFFERED_AUDIO }) {
-                debugLog("airplay video-only SETUP: no audio stream was requested by the iPhone; " +
-                    "Android AudioTrack and output routing cannot produce independent CarPlay audio yet")
+                debugLog("airplay video-only SETUP: the iPhone did not request an audio stream in this " +
+                    "SETUP; audio will start when the iPhone requests it")
             }
             val body = BplistCodec.encode(linkedMapOf("streams" to responseStreams))
             trace("airplay SETUP response bplistHex=${body.toHex()}")

@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothHeadset
 import android.bluetooth.BluetoothProfile
 import com.shilapi.xcertplay.compat.BluetoothCompat
+import com.shilapi.xcertplay.media.musicVolumeWarning
 import com.shilapi.xcertplay.bluetooth.BluetoothAddressResolver
 import com.shilapi.xcertplay.bluetooth.CarPlayBluetoothManager
 import android.bluetooth.BluetoothSocket
@@ -260,6 +261,12 @@ class CarPlayController(
     private val wirelessResourceLock = Any()
     private val wirelessFailureReported = AtomicBoolean(false)
     @Volatile private var firstTcpWatchdog: FirstTcpWatchdog? = null
+    /**
+     * Issue #95: set when a wired AirPlay session becomes active, cleared when the wired
+     * control loop sends StartSession. Lets the wired live loop fail fast when the iPhone
+     * never opens the AirPlay TCP connection.
+     */
+    private val wiredTcpArrived = AtomicBoolean(false)
     private val startupTimer = java.util.concurrent.ScheduledThreadPoolExecutor(1) { task ->
         Thread(task, "diplay-first-tcp-timeout").apply { isDaemon = true }
     }.apply { if (Build.VERSION.SDK_INT >= 21) removeOnCancelPolicy = true }
@@ -312,6 +319,9 @@ class CarPlayController(
             }
             activeSession = session
             if (replacement) restoreDashboardContent(session)
+            // Issue #95: wired first-TCP watchdog — a session only becomes active after the
+            // iPhone opened the AirPlay TCP connection and completed the handshake.
+            if (config.transport != CarPlayTransport.WIRELESS) wiredTcpArrived.set(true)
             debugLog(
                 "AirPlay session active controller=${session.controllerId ?: "unknown"} " +
                     "peer=${session.host}",
@@ -329,6 +339,12 @@ class CarPlayController(
                 }.getOrElse { "audioDiagnostics=${it.javaClass.simpleName}" }
                 debugLog("wireless audio route at AirPlay session start: $output; " +
                     "OEM A2DP/MCU source selection may differ from Android routing APIs")
+                // Issue #88: near-zero STREAM_MUSIC volume is the most common "packets flow
+                // but no sound" cause on head units; surface it loudly at session start.
+                runCatching {
+                    val audio = appContext.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    musicVolumeWarning(audio)?.let { debugLog(it) }
+                }
             }
             uiListener?.onSessionActive(session)
         }
@@ -1151,6 +1167,26 @@ class CarPlayController(
         var stage = "hotspot startup"
         try {
             debugLog("wireless bring-up generation=$generation starting")
+            // Issue #79: without a Bluetooth adapter, wireless CarPlay is impossible —
+            // iPhone needs Bluetooth for discovery/pairing. Fail fast instead of waiting
+            // 60s for a Wi-Fi connection that will never come.
+            val btAdapter = BluetoothAdapter.getDefaultAdapter()
+            if (btAdapter == null) {
+                throw IOException(
+                    "No Bluetooth adapter on this head unit; wireless CarPlay requires Bluetooth " +
+                        "for iPhone discovery. Use wired USB instead."
+                )
+            }
+            // Issue #117: adapter present but switched off — the iPhone can never discover
+            // the head unit, so fail fast with an actionable message instead of the 60s
+            // Wi-Fi wait ending in "Timed out waiting for iPhone to connect over Wi-Fi hotspot".
+            if (!btAdapter.isEnabled) {
+                throw IOException(
+                    "Bluetooth is turned off on this head unit; wireless CarPlay requires Bluetooth " +
+                        "for iPhone discovery. Turn on Bluetooth in the head unit system settings " +
+                        "and retry, or use wired USB instead."
+                )
+            }
             closeWirelessStack(generation = generation)
             if (
                 closed ||
@@ -2259,14 +2295,28 @@ class CarPlayController(
                     debugLog("wired $message")
                     if (message.contains("carplay-start-session")) {
                         vpnService?.sendUnsolicitedNeighborAdvertisement(force = true)
+                        // Issue #95: arm the first-TCP watchdog — a new StartSession means any
+                        // previous session no longer counts.
+                        wiredTcpArrived.set(false)
                     }
                 },
+                airPlayTcpArrived = { wiredTcpArrived.get() },
             )
             onStatus(
                 when (result.terminal) {
-                    Iap2WiredControlTerminal.TIMED_OUT -> CarPlayStatus.ControlEnded
+                    Iap2WiredControlTerminal.TIMED_OUT ->
+                        CarPlayStatus.Failed("Wired CarPlay control timed out at ${result.stage}; StartSession sent=${result.carPlayStartSessionsSent}")
                     Iap2WiredControlTerminal.CHANNEL_CLOSED ->
                         CarPlayStatus.Failed("CarPlay control channel closed")
+                    // Issue #84/#61: the iPhone went quiet long after StartSession — the old
+                    // code spun here forever on "控制通道运行中". Fail loudly so the existing
+                    // reconnect path rebuilds the link instead.
+                    Iap2WiredControlTerminal.PEER_SILENT ->
+                        CarPlayStatus.Failed("Wired CarPlay peer silent; resetting link")
+                    // Issue #95: iPhone alive on iAP2 but never opened the AirPlay TCP
+                    // connection — fail fast instead of idling until USB wedges.
+                    Iap2WiredControlTerminal.NO_AIRPLAY_TCP ->
+                        CarPlayStatus.Failed("No AirPlay TCP after CarPlay StartSession; resetting link")
                 },
             )
         } catch (error: Throwable) {

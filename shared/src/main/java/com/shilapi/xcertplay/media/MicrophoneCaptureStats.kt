@@ -30,9 +30,15 @@ internal class MicrophoneCaptureStats(
     private var lastSentNs: Long? = null
     private var sendGapMaxNs = 0L
     private var routedDeviceType: Int? = null
+    private var startNs: Long = windowStart
+    /** Ms from [started] to the first non-silent frame; -1 while none has arrived. Never reset. */
+    private var firstAudioMs: Long = -1
+    private var silentStreak = 0
+    private var silentFrames = 0L
 
     fun started(routeType: Int?) {
         routedDeviceType = routeType
+        startNs = nowNs()
         emit("Microphone: start $metadata routedDeviceType=${routeType ?: "unknown"}")
     }
 
@@ -65,6 +71,31 @@ internal class MicrophoneCaptureStats(
 
     fun sendFailed() { sendErrors++ }
 
+    /** True if no non-silent frame has ever been captured in this session. */
+    fun neverReceivedAudio(): Boolean = firstAudioMs < 0
+
+    /** Total count of all-zero frames captured in this session. */
+    fun silentFrameCount(): Long = silentFrames
+
+    /**
+     * Tracks per-frame capture silence for issue #102 triage: distinguishes "the recorder
+     * yields only zeroes" (broken audio path / cold-start window) from "packets never sent".
+     * Emits one line when a streak of [SILENT_STREAK_REPORT_FRAMES] consecutive silent frames
+     * is reached; the per-window total rides along the regular stats line.
+     */
+    fun frameSilent(silent: Boolean) {
+        if (silent) {
+            silentFrames++
+            silentStreak++
+            if (silentStreak == SILENT_STREAK_REPORT_FRAMES) {
+                emit("Microphone: silent $metadata frames=$silentStreak")
+            }
+        } else {
+            if (firstAudioMs < 0) firstAudioMs = (nowNs() - startNs) / 1_000_000
+            silentStreak = 0
+        }
+    }
+
     fun failure(stage: MicrophoneFailureStage, error: Throwable? = null, code: Int? = null) {
         emit(failureMessage(metadata, stage, error, code))
     }
@@ -77,7 +108,8 @@ internal class MicrophoneCaptureStats(
             "captureBytes=$capturedBytes reads=$reads zeroReads=$zeroReads readErrors=$readErrors " +
             "readMaxMs=${readMaxNs / 1_000_000} encodedFrames=$encodedFrames " +
             "emptyEncodedFrames=$emptyEncodedFrames udpSent=$udpSent sendErrors=$sendErrors " +
-            "sendGapMaxMs=${sendGapMaxNs / 1_000_000} ended=$ended")
+            "sendGapMaxMs=${sendGapMaxNs / 1_000_000} silentFrames=$silentFrames " +
+            "firstAudioMs=$firstAudioMs ended=$ended")
         windowStart = now
         capturedBytes = 0
         reads = 0
@@ -89,12 +121,15 @@ internal class MicrophoneCaptureStats(
         udpSent = 0
         sendErrors = 0
         sendGapMaxNs = 0
+        silentFrames = 0
     }
 
     private fun emit(message: String) { runCatching { report(message) } }
 
     companion object {
         private const val REPORT_INTERVAL_NS = 5_000_000_000L
+        /** Consecutive all-zero frames before a one-line silence notice is emitted. */
+        internal const val SILENT_STREAK_REPORT_FRAMES = 50
 
         private fun typeAndSource(audioType: String): Pair<String, String> = when (audioType) {
             "telephony" -> "telephony" to "VOICE_COMMUNICATION"

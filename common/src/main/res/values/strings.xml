@@ -426,6 +426,7 @@
     <string name="use_usage_content_type_routing_instead_of_stream_type">Use usage / content-type routing instead of stream type</string>
     <string name="use_your_last_connection_type_and_selected_iphone">Use your last connection type and selected iPhone.</string>
     <string name="vpn_consent_was_denied">VPN consent was denied</string>
+    <string name="vpn_consent_unavailable">VPN permission cannot be granted on this head unit (system VPN dialog missing). Wired CarPlay needs VPN; check for a system update or a different ROM.</string>
     <string name="waiting_for_iphone_over_usb">Waiting for iPhone over USB</string>
     <string name="waiting_for_mfi_coprocessor">Waiting for MFi coprocessor</string>
     <string name="waiting_for_paired_iphone">Waiting for paired iPhone</string>
@@ -634,6 +635,7 @@
     <string name="diagnostic_report_saved_to_path">Your report was saved to:\n%1$s\n\nYou can also share it or view it here. Nothing is sent automatically.</string>
     <string name="view_diagnostic_report">View report</string>
     <string name="diagnostic_report_copy_hint">Touch and hold the report text to select and copy it. You can use this if no sharing app is available.</string>
+    <string name="diagnostic_report_preview_unavailable">The report preview could not be displayed on this device, but the full report was saved to storage.</string>
     <string name="wheel_map_zoom">Zoom the dashboard map with the wheel</string>
     <string name="wheel_map_zoom_description">BYD\'s custom key switches the volume keys between volume and dashboard map zoom while the dashboard shows the CarPlay map. A call always keeps the volume. On some cars the console volume sends the same keys, so it zooms too while zoom is on. Uses DiPlay\'s wheel key service; the note on the dashboard needs ADB.</string>
     <string name="wheel_keys_service_on">Wheel key service: on</string>

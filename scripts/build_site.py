@@ -8,7 +8,7 @@ SITE = ROOT / 'site'
 data = json.loads((SITE / 'content.json').read_text(encoding='utf-8'))
 BASE = 'https://programmerguohuajing.github.io/DiPlay-Legacy-Android/'
 REPO = 'https://github.com/programmerguohuajing/DiPlay-Legacy-Android'
-VERSION = '0.2.38'
+VERSION = '0.2.40'
 RELEASE = REPO + f'/releases/tag/v{VERSION}'
 DOWNLOAD = REPO + f'/releases/download/v{VERSION}/DiPlay-v{VERSION}-legacy-release.apk'
 for lang, d in data.items():
@@ -30,7 +30,6 @@ for lang, d in data.items():
 <section class="gallery"><h2>{e(d['gallery'])}</h2><div class="screens">{pics}</div></section>
 <div class="grid"><section class="card" id="install"><span class="eyebrow">01</span><h2>{e(d['setup'])}</h2><ol>{''.join('<li>'+e(x)+'</li>' for x in d['steps'])}</ol><p class="note">{e(d['bssid'])}</p><a href="{REPO}/blob/main/docs/INSTALL.md">{e(d['adb'])} ↗</a></section>
 <section class="card"><span class="eyebrow">02</span><h2>{e(d['whats'])}</h2><ul>{''.join('<li>'+e(x)+'</li>' for x in d['features'])}</ul><a href="{RELEASE}">{e(d['notes'])} ↗</a><h3>{e(d['compat'])}</h3><p>{e(d['compatText'])}</p></section></div>
-<section class="card updates"><div><h2>{e(d['follow'])}</h2><p>{e(d['followText'])}</p></div><a class="button secondary" href="https://t.me/byd_localized">{e(d['telegram'])} ↗</a></section>
 <section class="signing"><h2>{e(d['update'])}</h2><p>{e(d['updateText'])}</p></section>
 <section class="card"><h2>{e(d['diagnosticsTitle'])}</h2><p>{e(d['diagnosticsText'])}</p><a href="{REPO}/issues">{e(d['feedback'])} ↗</a> · <a href="{REPO}/issues/new/choose">{e(d['newIssue'])} ↗</a></section>
 <footer><nav><a href="{REPO}/blob/main/docs/PRIVACY.md">{e(d["privacy"])}</a><a href="{REPO}">{e(d['source'])}</a><a href="{RELEASE}">{e(d['notes'])}</a><a href="{REPO}/issues">{e(d['feedback'])}</a></nav><p>{e(d['footer'])}</p></footer>

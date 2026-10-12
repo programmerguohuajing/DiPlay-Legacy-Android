@@ -411,7 +411,16 @@ class TlsDuplexChannel private constructor(
                 val supported = engine.supportedProtocols.toSet()
                 val enabled = ALLOWED_PROTOCOLS.filter(supported::contains).toTypedArray()
                 if (enabled.isEmpty()) {
-                    throw IphoneUsbException.Protocol("TLS engine supports neither TLSv1.2 nor TLSv1.3")
+                    // The factory verified TLSv1.2/1.3 during selection, but the returned engine
+                    // reports neither. This happens on vendor ROMs with a broken TLS provider
+                    // (e.g. old OpenSSL exposing only TLSv1). CarPlay USB Lockdown requires
+                    // TLS 1.2+; there is no software workaround on such devices.
+                    throw IphoneUsbException.Protocol(
+                        "TLS engine supports neither TLSv1.2 nor TLSv1.3 " +
+                            "(reported: ${supported.joinToString(",").ifEmpty { "none" }}). " +
+                            "This head unit's system TLS is too old for CarPlay USB; " +
+                            "a firmware update from the vendor may help."
+                    )
                 }
                 engine.enabledProtocols = enabled
                 return TlsDuplexChannel(underlying, engine).also {

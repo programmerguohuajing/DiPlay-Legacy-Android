@@ -15,6 +15,12 @@ class DiPlayUpdateClientTest {
     private val name = "DiPlay-v0.2.34-legacy-release.apk"
     private val prefix = "https://github.com/programmerguohuajing/DiPlay-Legacy-Android/releases/download/v0.2.34/"
 
+    @Test fun githubApkPrefersDomesticRelayWithDirectFallback() {
+        val url = prefix + name
+        assertEquals(listOf("https://ghproxy.net/$url", url), DiPlayUpdateClient.downloadCandidates(url))
+        assertEquals(listOf("https://example.com/test.apk"), DiPlayUpdateClient.downloadCandidates("https://example.com/test.apk"))
+    }
+
     @Test fun acceptsOnlyHigherStableVersion() {
         assertTrue(DiPlayUpdateClient.newerVersion("v0.2.34", "0.2.33"))
         assertTrue(DiPlayUpdateClient.newerVersion("v1.0.0", "0.9.99"))

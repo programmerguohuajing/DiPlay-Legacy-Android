@@ -1,13 +1,14 @@
 package com.shilapi.xcertplay
 
 import org.json.JSONObject
+import com.shilapi.xcertplay.host.R
 import java.io.File
 import java.io.IOException
 import java.net.URL
 import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 
-/** Prefer the Gitee release mirror, with GitHub fallback; never install unverified assets. */
+/** GitHub-only updates with a domestic HTTPS mirror for release assets. */
 internal object DiPlayUpdateClient {
     private const val REPO = "programmerguohuajing/DiPlay-Legacy-Android"
     private const val LATEST_URL = "https://api.github.com/repos/$REPO/releases/latest"
@@ -40,17 +41,8 @@ internal object DiPlayUpdateClient {
         return false
     }
 
-    /** China-accessible Gitee is first; try GitHub only if its mirror cannot be read. */
-    fun latest(installed: String): Release? = try {
-        DiPlayGiteeReleases.latest(installed) { readText(it, MAX_METADATA) }
-    } catch (giteeFailure: Exception) {
-        try {
-            latestFromGitHub(installed)
-        } catch (githubFailure: Exception) {
-            githubFailure.addSuppressed(giteeFailure)
-            throw githubFailure
-        }
-    }
+    /** Discover releases only from the canonical GitHub repository. */
+    fun latest(installed: String): Release? = latestFromGitHub(installed)
 
     /** Unauthenticated GitHub API calls may be rate-limited on shared mobile networks. */
     private fun latestFromGitHub(installed: String): Release? = try {
@@ -115,8 +107,27 @@ internal object DiPlayUpdateClient {
         return Release(tag, root.optString("body").take(6000), apk, apkUrl, shaUrl, bytes)
     }
 
+    /** Prefer domestic relay for canonical GitHub release assets, not release metadata. */
+    internal fun downloadCandidates(url: String): List<String> {
+        val canonical = "https://github.com/$REPO/releases/download/"
+        return if (url.startsWith(canonical)) listOf("https://ghproxy.net/$url", url)
+        else listOf(url)
+    }
+
+    private fun <T> withDownloadFallback(url: String, action: (String) -> T): T {
+        var failure: Exception? = null
+        for (candidate in downloadCandidates(url)) {
+            try {
+                return action(candidate)
+            } catch (error: Exception) {
+                if (failure == null) failure = error else failure.addSuppressed(error)
+            }
+        }
+        throw failure ?: IOException("No update download source")
+    }
+
     fun checksum(release: Release): String =
-        parseChecksum(readText(release.checksumUrl, MAX_DIGEST_FILE), release.apkName)
+        parseChecksum(withDownloadFallback(release.checksumUrl) { readText(it, MAX_DIGEST_FILE) }, release.apkName)
 
     internal fun parseChecksum(content: String, apkName: String): String {
         val words = content.trim().split(Regex("\\s+"))
@@ -134,7 +145,8 @@ internal object DiPlayUpdateClient {
         val temporary = File(directory, release.apkName + ".part")
         temporary.delete()
         try {
-            val connection = connect(release.apkUrl)
+            withDownloadFallback(release.apkUrl) { assetUrl ->
+            val connection = connect(assetUrl)
             try {
                 val messageDigest = MessageDigest.getInstance("SHA-256")
                 var count = 0L
@@ -160,6 +172,7 @@ internal object DiPlayUpdateClient {
                 }
             } finally {
                 connection.disconnect()
+            }
             }
             if (finished.exists() && !finished.delete()) throw IOException("Cannot replace cached update")
             if (!temporary.renameTo(finished)) throw IOException("Cannot finalize the downloaded APK")
@@ -188,12 +201,28 @@ internal object DiPlayUpdateClient {
         }
     }
 
-    /** Older Android 4.4 systems often disable TLS 1.2 in their platform HTTPS provider. */
+    /** Android 4.4 vendor ROMs can lack both TLS 1.2 and modern public CA roots. */
+    @Volatile private var appContext: android.content.Context? = null
+
+    fun configure(context: android.content.Context) {
+        appContext = context.applicationContext
+    }
+
     private val legacyTlsFactory by lazy {
+        val context = appContext ?: throw IOException("Updater trust store not initialized")
+        val roots = java.security.cert.CertificateFactory.getInstance("X.509")
+        val store = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType()).apply { load(null) }
+        context.resources.openRawResource(R.raw.update_ca_bundle).use { stream ->
+            val certificates = roots.generateCertificates(stream)
+            if (certificates.isEmpty()) throw IOException("Bundled update trust roots are empty")
+            certificates.forEachIndexed { index, certificate ->
+                store.setCertificateEntry("update-root-$index", certificate)
+            }
+        }
         val trust = javax.net.ssl.TrustManagerFactory.getInstance(
             javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm(),
         )
-        trust.init(null as java.security.KeyStore?)
+        trust.init(store)
         javax.net.ssl.SSLContext.getInstance("TLS", org.conscrypt.Conscrypt.newProvider()).apply {
             init(null, trust.trustManagers, null)
         }.socketFactory
@@ -206,8 +235,7 @@ internal object DiPlayUpdateClient {
             val host = candidate.host.lowercase()
             val approvedHost = host == "api.github.com" || host == "github.com" ||
                 host == "release-assets.githubusercontent.com" ||
-                host == "objects.githubusercontent.com" ||
-                host == "gitee.com" || host.endsWith(".gitee.com")
+                host == "objects.githubusercontent.com" || host == "ghproxy.net"
             if (candidate.protocol != "https" || !approvedHost) {
                 throw IOException("Untrusted update redirect")
             }

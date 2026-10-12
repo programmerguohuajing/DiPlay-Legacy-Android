@@ -388,6 +388,7 @@
     <string name="use_usage_content_type_routing_instead_of_stream_type">使用 usage / content-type 路由代替流类型</string>
     <string name="use_your_last_connection_type_and_selected_iphone">使用上次的连接方式和已选 iPhone。</string>
     <string name="vpn_consent_was_denied">VPN 授权被拒绝</string>
+    <string name="vpn_consent_unavailable">此车机无法授予 VPN 权限（系统 VPN 确认组件缺失）。有线 CarPlay 需要 VPN，请检查系统更新或更换 ROM。</string>
     <string name="waiting_for_iphone_over_usb">正在等待 USB 连接的 iPhone</string>
     <string name="waiting_for_mfi_coprocessor">正在等待 MFi 协处理器</string>
     <string name="waiting_for_paired_iphone">正在等待已配对的 iPhone</string>
@@ -597,6 +598,7 @@
     <string name="diagnostic_report_saved_to_path">报告已保存到：\n%1$s\n\n您也可以在此分享或查看报告。不会自动发送任何内容。</string>
     <string name="view_diagnostic_report">查看报告</string>
     <string name="diagnostic_report_copy_hint">长按报告文本即可选择并复制。如果没有可用的分享应用，可以使用此方式。</string>
+    <string name="diagnostic_report_preview_unavailable">本机无法显示报告预览，但完整报告已保存到存储中。</string>
     <string name="wheel_map_zoom">用方向盘按键缩放仪表盘地图</string>
     <string name="wheel_map_zoom_description">仪表盘显示 CarPlay 地图时，比亚迪自定义按键可在音量和仪表盘地图缩放之间切换音量键。通话时按键始终调节音量。部分车型的中控音量与方向盘发送相同按键，因此缩放模式下它也会缩放地图。使用 DiPlay 方向盘按键服务；仪表盘上的提示需要 ADB。</string>
     <string name="wheel_keys_service_on">方向盘按键服务：已开启</string>

@@ -73,6 +73,9 @@ internal class AudioFocusCoordinator(
             "${audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}"
     }.getOrElse { "audioRouteDiagnostics=${it.javaClass.simpleName}" }
 
+    /** Warns when the head unit's media volume would mute CarPlay audio. See issue #88. */
+    internal fun musicVolumeWarning(): String? = musicVolumeWarning(manager)
+
     private fun listenerFor(generation: Long) = AudioManager.OnAudioFocusChangeListener { change ->
         synchronized(this) {
             // Android may have queued callbacks before a request was abandoned or replaced.
@@ -1577,6 +1580,9 @@ private class AudioRenderer(
             "route=$routeLabel " +
             "bufferMs=${capacityBytes * 1000L / bytesPerSecond} startMs=${startThresholdBytes * 1000L / bytesPerSecond} " +
             trackMetadata)
+        // Issue #88: a near-zero STREAM_MUSIC volume is the most common "packets flow but
+        // no sound" cause on head units; surface it loudly while the audio starts.
+        audioFocusCoordinator.musicVolumeWarning()?.let { report(it) }
         Log.i(
             TAG,
             "audio track prepared type=${format.payloadType} audioType=${format.audioType} " +
@@ -1780,7 +1786,13 @@ private class AudioRenderer(
     private fun feedCodec(payload: ByteArray, presentationTimeUs: Long) {
         val codec = codec ?: run { decoderUnavailablePackets++; return }
         diagnosticStage = "decoder-input"
-        val index = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
+        // Upstream #381: while a blocking track write holds this thread, decoded output fills
+        // up and the decoder stops taking input. Dropping the packet after one 10 ms wait cut
+        // ~21 ms of music every 10-20 s; drain the output and keep waiting instead.
+        val index = VideoInputPump.acquire(
+            running = { running }, drain = { drainCodec(codec) },
+            dequeue = { codec.dequeueInputBuffer(INPUT_TIMEOUT_US) },
+        )
         if (index < 0) {
             inputDropped++
             if (inputDropped == 1) {

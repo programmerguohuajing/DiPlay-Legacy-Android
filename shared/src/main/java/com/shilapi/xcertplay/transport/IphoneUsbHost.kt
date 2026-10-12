@@ -165,6 +165,7 @@ class IphoneUsbHost(
                 val response = ByteArray(VENDOR_RESPONSE_LENGTH)
                 var lastTransferred = -1
                 var success = false
+                var stalled = 0
                 val maxAttempts = 3
                 for (attempt in 1..maxAttempts) {
                     lastTransferred = connection.controlTransfer(
@@ -180,6 +181,9 @@ class IphoneUsbHost(
                         success = true
                         break
                     }
+                    // Issue #107: -1 means the iPhone STALLed the request (rejected outright),
+                    // not a timeout. Count them to tell "iPhone refuses" from "no answer".
+                    if (lastTransferred < 0) stalled++
                     if (attempt < maxAttempts) {
                         try {
                             Thread.sleep(200L * attempt)
@@ -190,8 +194,18 @@ class IphoneUsbHost(
                     }
                 }
                 if (!success) {
+                    // The vendor request is standard and works on other devices/iOS versions;
+                    // a STALL almost always means the iPhone refused it: non-MFi cable, or
+                    // the "Trust This Computer" prompt was never accepted.
+                    val hint = if (stalled == maxAttempts) {
+                        " The iPhone rejected the CarPlay configuration request outright" +
+                            " (USB STALL). Use an original Apple cable and accept" +
+                            " \"Trust This Computer\" on the iPhone when prompted."
+                    } else {
+                        ""
+                    }
                     throw IphoneUsbException.Protocol(
-                        "CarPlay configuration request transferred $lastTransferred of ${response.size} bytes (after $maxAttempts attempts)",
+                        "CarPlay configuration request transferred $lastTransferred of ${response.size} bytes (after $maxAttempts attempts).$hint",
                     )
                 }
                 TransitionResult.ReenumerationRequested
@@ -253,7 +267,11 @@ class IphoneUsbHost(
         if (!usbManager.hasPermission(device)) {
             throw IphoneUsbException.PermissionDenied("USB permission has not been granted")
         }
+        // Issue #112: openDevice() returns null when the UsbDevice object is stale
+        // (iPhone re-enumerated; Android issued a new UsbDevice instance). Refresh from
+        // the live device list and retry once before giving up.
         val connection = usbManager.openDevice(device)
+            ?: refreshDevice(device)?.let { usbManager.openDevice(it) }
             ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not open the iPhone")
         try {
             operation(connection)
@@ -275,7 +293,9 @@ class IphoneUsbHost(
         if (!usbManager.hasPermission(device)) {
             throw IphoneUsbException.PermissionDenied("USB permission has not been granted")
         }
+        // Issue #112: stale UsbDevice after re-enumeration; try the fresh instance.
         val connection = usbManager.openDevice(device)
+            ?: refreshDevice(device)?.let { usbManager.openDevice(it) }
             ?: throw IphoneUsbException.DeviceUnavailable("UsbManager could not open the iPhone")
         val sharedConnection = SharedUsbDeviceConnection.own(connection)
         var claimedInterface: UsbInterface? = null
@@ -353,6 +373,16 @@ class IphoneUsbHost(
             throw IphoneUsbException.DeviceUnavailable("USB device is not a configured iPhone identity")
         }
     }
+
+    /**
+     * Issue #112: find the current UsbDevice instance for the same VID/PID. After the iPhone
+     * re-enumerates, the UsbDevice object we hold is stale and openDevice() returns null;
+     * the live list has the fresh instance.
+     */
+    private fun refreshDevice(stale: UsbDevice): UsbDevice? =
+        usbManager.deviceList.values.firstOrNull {
+            it.vendorId == stale.vendorId && it.productId == stale.productId
+        }
 
     private fun permissionPendingIntent(): PendingIntent {
         val intent = Intent(permissionAction).setPackage(appContext.packageName)
@@ -512,8 +542,12 @@ class Iap2UsbSession internal constructor(
                 sharedConnection.await(request, timeoutMillis)
             } catch (_: TimeoutException) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    drainCancelledRead(request)
+                    // Upstream #625: a read that completes between the timeout and the cancel
+                    // can no longer be cancelled — drain it and keep its bytes so the session
+                    // survives instead of dying every few minutes.
+                    val drained = drainTimedOutRead(request)
                     readQueued = false
+                    if (drained != null) return@synchronized drained
                 }
                 // Below Android 8 (API 26), request stays queued for the next poll because
                 // cancel() is unreliable on legacy usbfs drivers and closing an in-flight
@@ -606,17 +640,30 @@ class Iap2UsbSession internal constructor(
         if (closed) throw IphoneUsbException.DeviceUnavailable("USBMUX session is closed")
     }
 
-    private fun drainCancelledRead(request: UsbRequest) {
-        if (!request.cancel()) {
-            throw failSession("Android could not cancel timed out USBMUX read request")
-        }
+    /**
+     * Upstream #625: cancels a read that timed out and takes it back from Android. A read that
+     * completes between the timeout and the cancel can no longer be cancelled: it is already on
+     * its way back. That race ended the whole session every few minutes. The read is drained
+     * either way, and any bytes it carries are returned so the USBMUX stream stays intact.
+     */
+    private fun drainTimedOutRead(request: UsbRequest): ByteArray? {
+        val cancelled = request.cancel()
         val completed = try {
             sharedConnection.await(request, CANCEL_DRAIN_TIMEOUT_MILLIS)
         } catch (_: TimeoutException) {
-            throw failSession("Timed out draining cancelled USBMUX read request")
+            throw failSession(
+                if (cancelled) "Timed out draining cancelled USBMUX read request"
+                else "Android could not cancel timed out USBMUX read request",
+            )
         }
         if (completed !== request) {
             throw failSession("Android did not drain the cancelled USBMUX read request")
+        }
+        val position = directReadBuffer.position()
+        if (position <= 0) return null
+        return ByteArray(position).also {
+            directReadBuffer.flip()
+            directReadBuffer.get(it)
         }
     }
 

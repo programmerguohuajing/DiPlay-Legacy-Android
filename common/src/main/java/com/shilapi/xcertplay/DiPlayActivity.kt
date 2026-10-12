@@ -4339,15 +4339,36 @@ class DiPlayActivity : ComponentActivity() {
     }
 
     private fun showDiagnosticReport(report: String) {
+        // Some head units (e.g. Allwinner T3, real API 19) choke laying out a multi-hundred-KB
+        // TextView: the tap then appears dead. Show only the tail in-app; the full report is
+        // already saved to storage by the export step.
+        val preview = if (report.length > REPORT_PREVIEW_CHARS) {
+            "…[仅显示尾部 ${REPORT_PREVIEW_CHARS / 1024}KB，全文已保存到文件]\n" +
+                report.takeLast(REPORT_PREVIEW_CHARS)
+        } else {
+            report
+        }
         val body = column().apply { setPadding(dp(24), dp(12), dp(24), dp(12)) }
         body.addView(label(getString(R.string.diagnostic_report_copy_hint), 14, MUTED))
-        body.addView(label(report, 13, TEXT).apply {
-            typeface = Typeface.MONOSPACE
-            setTextIsSelectable(true)
-        })
-        AlertDialog.Builder(this).setTitle(getString(R.string.view_diagnostic_report))
-            .setView(ScrollView(this).apply { addView(body) })
-            .setPositiveButton(getString(R.string.close), null).show()
+        try {
+            body.addView(label(preview, 13, TEXT).apply {
+                typeface = Typeface.MONOSPACE
+                setTextIsSelectable(true)
+            })
+        } catch (error: Throwable) {
+            // Even the preview can blow the layout budget on very weak devices; fall back to
+            // a short notice instead of a dead tap.
+            Log.w("DiPlay", "report preview failed", error)
+            body.addView(label(getString(R.string.diagnostic_report_preview_unavailable), 14, MUTED))
+        }
+        runCatching {
+            AlertDialog.Builder(this).setTitle(getString(R.string.view_diagnostic_report))
+                .setView(ScrollView(this).apply { addView(body) })
+                .setPositiveButton(getString(R.string.close), null).show()
+        }.onFailure { error ->
+            Log.w("DiPlay", "report dialog failed", error)
+            toast(getString(R.string.diagnostic_report_preview_unavailable))
+        }
     }
     private fun permissionHelp(title: String, body: String) {
         AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton(getString(R.string.app_settings)) { _, _ ->
@@ -4686,6 +4707,8 @@ class DiPlayActivity : ComponentActivity() {
         private const val BYD_VEHICLE_TAG = "DiPlay-BYD13"
         private const val VEHICLE_VALIDATION_RETRY_MILLIS = 500L
         private const val ADB_KEY_SAVE_WAIT_MILLIS = 500L
+        /** In-app report preview cap: weak head units cannot lay out a huge TextView. */
+        private const val REPORT_PREVIEW_CHARS = 100 * 1024
         private val BG = Color.rgb(12, 17, 27)
         private val SURFACE = Color.rgb(21, 30, 44)
         // One step lighter than a card, so a button reads as a button even where its 1 px border is faint.

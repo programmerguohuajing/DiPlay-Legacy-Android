@@ -48,14 +48,32 @@ object LockdownTlsEngineFactory {
             // Some Android 4.4/5.1 vendor providers expose only TLSv1 through the generic
             // "TLS" SSLContext alias, while the version-specific factory supports TLSv1.2.
             // Never downgrade Lockdown to TLSv1.0/1.1.
-// Bundled Conscrypt supplies real TLS 1.2 on API 19 vendor ROMs whose
+            // Bundled Conscrypt supplies real TLS 1.2 on API 19 vendor ROMs whose
             // AndroidOpenSSL alias may report TLSv1.2 but expose only TLSv1/SSLv3.
+            // Record why the bundled candidate was rejected: without it, the next #67-style
+            // report cannot tell "Conscrypt broken" from "platform lacks TLS 1.2".
+            val conscryptNotes = mutableListOf<String>()
+            // On some vendor ROMs (e.g. Allwinner T3 Android 4.4) the Conscrypt native library
+            // does not auto-load. Try explicit load first so we get a clear error reason.
+            runCatching {
+                System.loadLibrary("conscrypt_jni")
+            }.onFailure {
+                conscryptNotes += "explicit loadLibrary failed: ${it.javaClass.simpleName}"
+            }
             val bundled = runCatching {
                 SSLContext.getInstance("TLS", Conscrypt.newProvider()).apply {
                     init(keyManagers, arrayOf(UsbLockdownTrustManager), null)
                 }
-            }.getOrNull()?.takeIf { candidate ->
-                candidate.createSSLEngine().supportedProtocols.contains("TLSv1.2")
+            }.onFailure {
+                conscryptNotes += "init failed: ${it.javaClass.simpleName}: ${it.message?.take(120)}"
+            }.getOrNull()?.let { candidate ->
+                val protocols = candidate.createSSLEngine().supportedProtocols
+                if (!protocols.contains("TLSv1.2")) {
+                    conscryptNotes += "engine supportedProtocols=${protocols.joinToString(",")}"
+                    null
+                } else {
+                    candidate
+                }
             }
             val context = bundled ?: sequenceOf("TLSv1.2", "TLS")
                 .mapNotNull { protocol ->
@@ -70,13 +88,34 @@ object LockdownTlsEngineFactory {
                         it == "TLSv1.2" || it == "TLSv1.3"
                     }
                 } ?: throw GeneralSecurityException(
-                    "The Android TLS provider cannot negotiate TLSv1.2 or TLSv1.3; " +
-                        "USB Lockdown requires a compatible security provider"
+                    buildString {
+                        append("The Android TLS provider cannot negotiate TLSv1.2 or TLSv1.3; ")
+                        append("USB Lockdown requires a compatible security provider")
+                        if (conscryptNotes.isNotEmpty()) {
+                            append("; bundled Conscrypt rejected: ")
+                            append(conscryptNotes.joinToString("; "))
+                        }
+                    }
                 )
             return context.createSSLEngine(PEER_HOST, PEER_PORT).apply {
                 useClientMode = true
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     sslParameters = sslParameters.apply { endpointIdentificationAlgorithm = null }
+                }
+                // Verify the actual returned engine, not just a test instance: on some vendor
+                // ROMs the supported protocols differ between engine instances from the same
+                // context. If this fails, TlsDuplexChannel would hit the same wall.
+                val actual = supportedProtocols.toSet()
+                if (!actual.contains("TLSv1.2") && !actual.contains("TLSv1.3")) {
+                    throw GeneralSecurityException(
+                        "Selected TLS engine reports no TLSv1.2/1.3 " +
+                            "(supported=${actual.joinToString(",").ifEmpty { "none" }})" +
+                            if (conscryptNotes.isNotEmpty()) {
+                                "; bundled Conscrypt rejected: " + conscryptNotes.joinToString("; ")
+                            } else {
+                                ""
+                            }
+                    )
                 }
             }
         } finally {

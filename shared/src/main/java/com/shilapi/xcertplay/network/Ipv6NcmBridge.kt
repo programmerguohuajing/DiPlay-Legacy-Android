@@ -44,6 +44,13 @@ class Ipv6NcmBridge(
     private var loggedOutbound = false
     private var loggedWaitingForPeer = false
     private var inboundLogBudget = 16
+    /**
+     * Issue #95: the report never shows whether the iPhone sends TCP SYN to port 7000 —
+     * the L4 summary only reaches logcat. Mirror a redacted per-packet summary into the
+     * diagnostic report (separate small budget) so the next report can distinguish
+     * "iPhone never sent TCP" from "SYN lost in bridge/TUN/kernel".
+     */
+    private var reportInboundBudget = 8
     private var outboundLogBudget = 24
     @Volatile
     private var lastNaTimeNanos = 0L
@@ -124,6 +131,10 @@ class Ipv6NcmBridge(
                 if (inboundLogBudget > 0) {
                     inboundLogBudget--
                     Log.i(TAG, "ncm inbound ${frame.summary(ipv6.payloadOffset)}")
+                }
+                if (reportInboundBudget > 0) {
+                    reportInboundBudget--
+                    runCatching { onDebugLog("ncm inbound diag ${frame.diagnosticSummary(ipv6.payloadOffset)}") }
                 }
                 output.write(frame, ipv6.payloadOffset, ipv6.payloadLength)
             }
@@ -262,4 +273,23 @@ class Ipv6NcmBridge(
         const val JOIN_TIMEOUT_MILLIS = 2_000L
         const val NA_RETRY_INTERVAL_NANOS = 500_000_000L
     }
+}
+
+/**
+ * IP-redacted L4 summary of one inbound IPv6 packet for the user-exported diagnostic
+ * report (issue #95): enough to tell "TCP SYN to port 7000 arrived" from "no TCP at all",
+ * without leaking addresses. [offset] is the IPv6 header start within the Ethernet frame.
+ */
+internal fun ByteArray.diagnosticSummary(offset: Int): String {
+    fun u16(at: Int): Int = ((this[at].toInt() and 0xff) shl 8) or (this[at + 1].toInt() and 0xff)
+    val payloadBytes = size - offset
+    if (payloadBytes < 44) return "bytes=$payloadBytes"
+    val nextHeader = this[offset + 6].toInt() and 0xff
+    val detail = when (nextHeader) {
+        6 -> " tcp=->${u16(offset + 42)}"
+        17 -> " udp=->${u16(offset + 42)}"
+        58 -> " icmp6=${this[offset + 40].toInt() and 0xff}"
+        else -> ""
+    }
+    return "bytes=$payloadBytes next=$nextHeader$detail"
 }

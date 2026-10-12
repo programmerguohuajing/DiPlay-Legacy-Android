@@ -71,49 +71,68 @@ internal object DiagnosticExportStore {
     }
     /** Best-effort verified copies: report success only for a write that actually completed. */
     private fun exportCopiesToAccessibleStorage(context: Context, fileName: String, report: String, preferredRoot: File?): List<String> {
-        val written = linkedSetOf<String>()
-        val roots = linkedSetOf<File>()
-        if (preferredRoot != null) roots.add(preferredRoot)
-        runCatching { roots.add(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) }
-        runCatching { roots.add(Environment.getExternalStorageDirectory()) }
+        // User complaint: the old code wrote a copy into a "DiPlay" subfolder under EVERY
+        // candidate location (Downloads, storage root, each USB mount...), littering the USB
+        // drive with duplicates. Now write exactly one copy, no subfolder:
+        // the user-chosen location wins; otherwise the first writable USB volume;
+        // otherwise the public Downloads directory.
+        val target: File? = when {
+            preferredRoot != null -> preferredRoot
+            else -> firstWritableUsbVolume(context)
+                ?: runCatching { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) }.getOrNull()
+        }?.let { runCatching { it.canonicalFile }.getOrDefault(it) }
+        if (target == null || !target.isDirectory || !target.canWrite()) return emptyList()
+        return runCatching {
+            val destination = File(target, fileName)
+            // Do not overwrite an existing report or follow an unexpected symlink.
+            if (destination.exists()) return@runCatching emptyList()
+            val bytes = report.toByteArray(Charsets.UTF_8)
+            destination.outputStream().use { it.write(bytes); it.flush() }
+            if (destination.length() != bytes.size.toLong()) {
+                destination.delete()
+                return@runCatching emptyList()
+            }
+            listOf(destination.absolutePath)
+        }.getOrDefault(emptyList())
+    }
+
+    /** First writable USB-like volume, for the single-copy export. See [availableUsbVolumes]. */
+    private fun firstWritableUsbVolume(context: Context): File? {
+        val candidates = linkedSetOf<File>()
         runCatching {
-            context.getExternalFilesDirs(null)?.drop(1)?.filterNotNull()?.forEach { roots.add(it) }
+            context.getExternalFilesDirs(null)?.drop(1)?.filterNotNull()?.forEach { candidates.add(it) }
         }
-        // Android 4.4 factory ROMs frequently mount USB media under vendor-named directories.
-        // Only inspect immediate children and one additional level, never traverse arbitrary trees.
         val basePaths = listOf("/storage", "/mnt", "/mnt/media_rw")
         val usbNames = Regex("(?i).*(usb|udisk|usbotg|otg|removable|external_usb).*")
         for (base in basePaths) {
             val dir = File(base)
             for (child in dir.listFiles().orEmpty()) {
                 if (!child.isDirectory) continue
-                if (usbNames.matches(child.name)) roots.add(child)
+                if (usbNames.matches(child.name)) candidates.add(child)
                 for (sub in child.listFiles().orEmpty()) {
                     if (sub.isDirectory && (usbNames.matches(child.name) || usbNames.matches(sub.name))) {
-                        roots.add(sub)
+                        candidates.add(sub)
                     }
                 }
             }
         }
-        for (root in roots) {
-            runCatching {
-                if (!root.isDirectory || !root.canWrite()) return@runCatching
-                val canonicalRoot = root.canonicalFile
-                val dir = File(canonicalRoot, "DiPlay")
-                if (!dir.isDirectory && !dir.mkdirs()) return@runCatching
-                val destination = File(dir, fileName)
-                // Do not overwrite an existing report or follow an unexpected symlink.
-                if (destination.exists()) return@runCatching
-                val bytes = report.toByteArray(Charsets.UTF_8)
-                destination.outputStream().use { it.write(bytes); it.flush() }
-                if (destination.length() != bytes.size.toLong()) {
-                    destination.delete()
-                    return@runCatching
-                }
-                written.add(destination.absolutePath)
-            }
+        return dedupeExportRoots(candidates.toList()).firstOrNull { it.isDirectory && it.canWrite() }
+    }
+
+    /**
+     * Head units often expose a single USB volume through several mount points at once
+     * (`/storage/xxxx`, `/mnt/usbhostN`, `/mnt/media_rw/xxxx`, app external dirs). Dedupe by
+     * canonical path so the same volume receives exactly one report copy instead of one per
+     * mount point. See issue #108.
+     */
+    internal fun dedupeExportRoots(candidates: List<File>): List<File> {
+        val seen = linkedSetOf<String>()
+        val roots = mutableListOf<File>()
+        for (candidate in candidates) {
+            val key = runCatching { candidate.canonicalPath }.getOrDefault(candidate.absolutePath)
+            if (seen.add(key)) roots.add(File(key))
         }
-        return written.toList()
+        return roots
     }
     private fun saveInDirectory(
         context: Context,

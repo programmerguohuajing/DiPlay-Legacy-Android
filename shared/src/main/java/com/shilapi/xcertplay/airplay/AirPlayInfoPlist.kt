@@ -152,13 +152,18 @@ object AirPlayInfoPlist {
         // formats (type 100 default) input & output. Omitting it causes iOS to refuse wireless
         // audio stream negotiation and route audio through iPhone speakers.
         val defaultInput = if (microphone) pcmMono or 0x70000000 else null
+        // Issue #88: even on devices without a system Opus decoder (Android 4.4), the type 100
+        // default OUTPUT must declare Opus or iOS skips audio negotiation entirely (video-only
+        // SETUP). iPhone actually sends AAC (which we decode) when Opus is declared but not
+        // usable — verified by v0.2.20 behavior on the same Android 4.4.2 device.
+        val defaultOutputOpus = 0x70000000
         // For actual speech capture (telephony / speechRecognition), offer PCM alone if no Opus encoder exists.
         val voiceInput = if (microphone) (if (microphoneOpus) pcmMono or 0x70000000 else pcmMono) else null
 
         return listOf(
             format(100, "compatibility", pcm, pcmInput),
             format(101, "compatibility", pcm),
-            format(100, "default", pcm or opus, defaultInput),
+            format(100, "default", pcm or defaultOutputOpus, defaultInput),
             format(100, "alert", pcm or opus),
             format(100, "media", pcm),
             format(100, "telephony", pcmMono or opus, voiceInput),

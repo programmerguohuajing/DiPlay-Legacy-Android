@@ -67,6 +67,12 @@ class CarPlayVpnService : VpnService() {
     private var attachGeneration = 0
     @Volatile var lastAttachFailure: String? = null
         private set
+    /**
+     * Set once a per-app VPN establish fails: this ROM's netd cannot do uid fwmark rules
+     * (e.g. Allwinner T3 units faking SDK 27 on a real API 19 ROM). Later attaches go
+     * straight to the route-only VPN instead of hitting the same rejection every retry.
+     */
+    @Volatile private var perAppVpnUnsupported = false
 
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -102,17 +108,24 @@ class CarPlayVpnService : VpnService() {
                 .addRoute(LINK_LOCAL_ROUTE, LINK_PREFIX)
                 .setSession(SESSION_NAME)
                 .setMtu(TUN_MTU)
-            if (Build.VERSION.SDK_INT >= 21) {
-                // Never retry a rejected per-app VPN as an unscoped one on supported platforms.
+            if (Build.VERSION.SDK_INT >= 21 && !perAppVpnUnsupported) {
+                // Per-app VPN scopes CarPlay traffic to this app on genuine API 21+ ROMs.
+                // Some T3 units fake SDK 27 on a real API 19 ROM whose netd rejects the uid
+                // fwmark rule ("Invalid argument"); once seen, later attaches skip the doomed
+                // per-app attempt and go straight to the route-only VPN below.
                 builder.setBlocking(true).addAllowedApplication(packageName)
             }
-            // KitKat has no per-app VPN. Only the IPv6 link-local route above is installed;
-            // no default route, DNS, Wi-Fi internet or mobile internet is captured.
+            // KitKat has no per-app VPN (and neither do ROMs whose netd rejects uid rules).
+            // Only the IPv6 link-local route above is installed; no default route, DNS,
+            // Wi-Fi internet or mobile internet is captured.
             attachStage = "VPN establish"
             val tunFd = try {
                 builder.establish()
             } catch (error: Exception) {
-                if (Build.VERSION.SDK_INT >= 21 && isUidRuleUnsupported(error)) {
+                if (Build.VERSION.SDK_INT >= 21 && !perAppVpnUnsupported && isUidRuleUnsupported(error)) {
+                    // Remember: this ROM's netd cannot do per-app VPN; go straight to
+                    // route-only next time instead of hitting the same rejection every retry.
+                    perAppVpnUnsupported = true
                     runCatching {
                         listener.onDebugLog("wired per-app VPN UID rule rejected by ROM netd: ${attachFailure(error)}; trying link-local route-only VPN")
                     }
@@ -415,10 +428,12 @@ class CarPlayVpnService : VpnService() {
         }
 
         internal fun isUidRuleUnsupported(error: Throwable): Boolean {
-            val message = error.message.orEmpty()
-            return message.contains("uid rule", ignoreCase = true) ||
-                message.contains("fwmark", ignoreCase = true) ||
-                message.contains("Failed to add uid", ignoreCase = true)
+            return generateSequence(error) { it.cause }.take(8).any { cause ->
+                val message = cause.message.orEmpty()
+                message.contains("uid rule", ignoreCase = true) ||
+                    message.contains("fwmark", ignoreCase = true) ||
+                    message.contains("Failed to add uid", ignoreCase = true)
+            }
         }
         /** Returns the VPN consent intent, or null when consent is already granted. */
         fun prepare(context: Context): Intent? = VpnService.prepare(context)

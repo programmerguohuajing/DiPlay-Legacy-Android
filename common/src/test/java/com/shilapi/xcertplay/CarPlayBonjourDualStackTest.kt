@@ -186,13 +186,16 @@ class CarPlayBonjourDualStackTest {
     @Test fun secondRegistryFailureCleansUpTheFirstAndMulticastLock() {
         setup()
         val first = mock(JmDNS::class.java)
+        val second = mock(JmDNS::class.java)
+        `when`(second.registerService(any(ServiceInfo::class.java))).thenThrow(IOException("registration failed"))
         mockStatic(JmDNS::class.java).use { factory ->
             factory.`when`<JmDNS> { JmDNS.create(ipv6, "carplay-020000000002") }.thenReturn(first)
-            factory.`when`<JmDNS> { JmDNS.create(ipv4, "carplay-020000000002") }.thenThrow(IOException("bind failed"))
+            factory.`when`<JmDNS> { JmDNS.create(ipv4, "carplay-020000000002") }.thenReturn(second)
             val bonjour = CarPlayBonjour(context, config, identity, ipv6.hostAddress, true,
                 additionalAddresses = listOf(ipv4))
             assertThrows(IOException::class.java) { bonjour.start() }
             verify(first).close()
+            verify(second).close()
             verify(lock).release()
         }
     }

@@ -45,7 +45,8 @@ class NtpClock(private val bindReference: InetAddress? = null) : Closeable {
 
     fun start(peerAddress: InetAddress, port: Int) {
         require(port > 0) { "timing port must be positive" }
-        peer = InetSocketAddress(peerAddress, port)
+        // Link-local peers need the interface scope id or UDP sends fail on strict vendor kernels.
+        peer = InetSocketAddress(AirPlaySocketBinder.scopedLinkLocal(peerAddress), port)
         sender = Thread(::runSender, "airplay-ntp-tx").apply { isDaemon = true; start() }
     }
 

@@ -20,6 +20,8 @@ import java.net.InetAddress
 class Iap2WiredControlClient(
     private val session: Iap2Session,
     private val mfi: Iap2MfiAuthenticationClient,
+    private val peerSilentResetMillis: Long = PEER_SILENT_RESET_MILLIS,
+    private val peerIdleDiagnosticMillis: Long = PEER_IDLE_DIAGNOSTIC_MILLIS,
 ) {
     fun run(
         identification: Iap2IdentificationConfig,
@@ -30,6 +32,12 @@ class Iap2WiredControlClient(
         vehicleStatusProvider: VehicleStatusProvider? = null,
         onIncoming: (Iap2Frame) -> Unit = {},
         onProgress: (String) -> Unit = {},
+        /**
+         * Issue #95: the iPhone may stay alive on iAP2 after StartSession yet never open the
+         * AirPlay TCP connection. When supplied, the live loop fails fast with NO_AIRPLAY_TCP
+         * instead of idling until the USB stack wedges. Defaults to disabled.
+         */
+        airPlayTcpArrived: () -> Boolean = { true },
     ): Iap2WiredControlResult {
         require(availableCurrentMilliAmps in 0..0xffff) {
             "availableCurrentMilliAmps must be in 0..65535"
@@ -58,6 +66,12 @@ class Iap2WiredControlClient(
 
         var forwardedFrames = 0
         var carPlayStartSessions = 0
+        var startSessionNanos = 0L
+        // Issue #84/#61: the live loop previously had no dead-link detection — once the
+        // iPhone went quiet, recv kept timing out and the UI sat on "控制通道运行中" forever.
+        val silenceMonitor = Iap2PeerSilenceMonitor(peerSilentResetMillis, peerIdleDiagnosticMillis)
+        // Only the initial CarPlay availability handshake is time-bounded; live control stays open.
+        val startupDeadlineNanos = System.nanoTime() + STARTUP_AVAILABILITY_TIMEOUT_MILLIS * NANOS_PER_MILLISECOND
         val location = Iap2LocationReporter(locationProvider, onProgress)
         val vehicleStatus = Iap2VehicleStatusReporter(vehicleStatusProvider, onProgress)
         try {
@@ -68,7 +82,14 @@ class Iap2WiredControlClient(
                 }
                 location.tick { send(it, deadlineNanos) }
                 vehicleStatus.tick { send(it, deadlineNanos) }
-                val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(remaining))
+                val startupRemaining = if (carPlayStartSessions == 0) {
+                    ((startupDeadlineNanos - System.nanoTime()) / NANOS_PER_MILLISECOND).coerceAtLeast(0L)
+                } else remaining
+                if (startupRemaining == 0L) {
+                    onProgress("iap2 wired startup timed out waiting for CarPlay availability")
+                    return Iap2WiredControlResult(Iap2WiredControlTerminal.TIMED_OUT, stage, forwardedFrames, carPlayStartSessions)
+                }
+                val pollTimeout = vehicleStatus.pollTimeout(location.pollTimeout(minOf(remaining, startupRemaining)))
                 val incoming = try {
                     session.recv(pollTimeout)
                 } catch (failure: IOException) {
@@ -99,8 +120,35 @@ class Iap2WiredControlClient(
                             carPlayStartSessions,
                         )
                     }
+                    // Issue #84/#61: surface peer silence in the report, and stop spinning
+                    // forever once the iPhone is quiet long after StartSession was sent.
+                    silenceMonitor.diagnosticIfDue()?.let { onProgress(it) }
+                    if (carPlayStartSessions > 0 && silenceMonitor.shouldReset()) {
+                        val idleMs = silenceMonitor.idleMillis()
+                        onProgress("iap2 wired peer silent for ${idleMs}ms; resetting link")
+                        return Iap2WiredControlResult(
+                            Iap2WiredControlTerminal.PEER_SILENT,
+                            stage,
+                            forwardedFrames,
+                            carPlayStartSessions,
+                        )
+                    }
+                    // Issue #95: iPhone alive on iAP2 but no AirPlay TCP — fail fast with a
+                    // clear message instead of idling until the USB stack wedges.
+                    if (carPlayStartSessions > 0 && !airPlayTcpArrived() &&
+                        System.nanoTime() - startSessionNanos >= WIRED_FIRST_TCP_MILLIS * NANOS_PER_MILLISECOND
+                    ) {
+                        onProgress("iap2 wired no AirPlay TCP ${WIRED_FIRST_TCP_MILLIS}ms after carplay-start-session")
+                        return Iap2WiredControlResult(
+                            Iap2WiredControlTerminal.NO_AIRPLAY_TCP,
+                            stage,
+                            forwardedFrames,
+                            carPlayStartSessions,
+                        )
+                    }
                     continue
                 }
+                silenceMonitor.onFrameReceived()
 
                 when (incoming.messageId) {
                     CARPLAY_AVAILABILITY -> {
@@ -111,6 +159,7 @@ class Iap2WiredControlClient(
                         send(carPlayStartSession(endpoint), deadlineNanos)
                         stage = Iap2WiredControlStage.CARPLAY_START_SENT
                         carPlayStartSessions++
+                        if (startSessionNanos == 0L) startSessionNanos = System.nanoTime()
                         onProgress("iap2 tx=0x4301 carplay-start-session")
                     }
 
@@ -142,10 +191,17 @@ class Iap2WiredControlClient(
         const val NO_TIMEOUT_MILLIS = Long.MAX_VALUE
         private const val CARPLAY_AVAILABILITY = 0x4300
         private const val CARPLAY_START_SESSION = 0x4301
+        private const val STARTUP_AVAILABILITY_TIMEOUT_MILLIS = 60_000L
         private const val DEFAULT_TIMEOUT_MILLIS = 60_000L
         private const val MAX_TIMEOUT_MILLIS = 24 * 60 * 60 * 1_000L
         private const val MAX_RECV_TIMEOUT_MILLIS = 5 * 60 * 1_000L
         private const val NANOS_PER_MILLISECOND = 1_000_000L
+        /** Idle diagnostic cadence for a quiet iAP2 peer (issue #84/#61, Fix 0). */
+        private const val PEER_IDLE_DIAGNOSTIC_MILLIS = 30_000L
+        /** Quiet long after StartSession: treat the link as dead and rebuild (issue #84/#61, Fix 1). */
+        private const val PEER_SILENT_RESET_MILLIS = 90_000L
+        /** No AirPlay TCP this long after StartSession: fail fast (issue #95). Mirrors wireless. */
+        private const val WIRED_FIRST_TCP_MILLIS = 30_000L
 
         /** Exact LIVI wired PowerSourceUpdate encoding: current and the charge-if-powered flag. */
         fun powerSourceUpdate(availableCurrentMilliAmps: Int): Iap2Frame =
@@ -228,7 +284,7 @@ enum class Iap2WiredControlStage {
     CARPLAY_START_SENT,
 }
 
-enum class Iap2WiredControlTerminal { CHANNEL_CLOSED, TIMED_OUT }
+enum class Iap2WiredControlTerminal { CHANNEL_CLOSED, TIMED_OUT, PEER_SILENT, NO_AIRPLAY_TCP }
 
 /** End state of the control loop only; it is not evidence of NCM or AirPlay availability. */
 data class Iap2WiredControlResult(
