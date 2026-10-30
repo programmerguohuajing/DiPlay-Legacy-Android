@@ -1,3 +1,10 @@
+# DiPlay 0.3.8 — 2026-10-30
+
+- Give 32000 Hz microphone requests fallback capture rates (#360): add 48000 Hz (with 3:2 downsample) and 16000 Hz (with 1:2 upsample) capture fallbacks for head units whose audio drivers return -1 on 32000 Hz minimum-buffer queries, fixing telephony uplink silence on RK3188 and similar platforms.
+- Stop the wired retry loop when the iPhone's USB state wedges on STALL (#359): count consecutive failures carrying the all-attempts-stalled hint and stop after 3, prompting the user to unplug, reboot the iPhone, and reconnect across all 7 locales.
+
+See [v0.3.8 release notes](docs/RELEASE-NOTES-0.3.8.md) for details.
+
 # DiPlay 0.3.7 — 2026-10-29
 
 - Post fallback surface re-add out of layout pass (#290): defer the removal and re-addition of the fallback SurfaceView to after the layout traversal (`fallback.post`), eliminating the null pointer dereference on Android 5.1.1 during startup size oscillations.
