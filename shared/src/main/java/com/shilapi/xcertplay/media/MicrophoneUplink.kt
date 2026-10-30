@@ -71,10 +71,13 @@ internal class MicrophoneUplink(
         } else {
             AndroidAudioFormat.CHANNEL_IN_MONO
         }
-        val candidateRates = if (config.sampleRate == 24000) {
-            listOf(24000, 48000, 16000)
-        } else {
-            listOf(config.sampleRate)
+        val candidateRates = when (config.sampleRate) {
+            // Issue #360: some legacy drivers refuse the min-buffer query for
+            // the requested rate outright (an RK3188 returns -1 for 32000), so
+            // a request without a fallback never starts capturing at all.
+            24000 -> listOf(24000, 48000, 16000)
+            32000 -> listOf(32000, 48000, 16000)
+            else -> listOf(config.sampleRate)
         }
         var selectedRate = config.sampleRate
         var minBuffer = -1
@@ -124,7 +127,13 @@ internal class MicrophoneUplink(
             running.set(false)
             return false
         }
-        val scale = if (config.sampleRate > 0) maxOf(1, actualSampleRate / config.sampleRate) else 1
+        // Ceiling division: a 48000 capture for a 32000 request needs 1.5x the
+        // frame bytes per frame period; the plain integer ratio rounds to 1.
+        val scale = if (config.sampleRate > 0) {
+            maxOf(1, (actualSampleRate + config.sampleRate - 1) / config.sampleRate)
+        } else {
+            1
+        }
         val bufferSize = maxOf(minBuffer * 2, config.frameBytes * 4 * scale)
         // Some head units throw on VOICE_RECOGNITION at build(); VOICE_COMMUNICATION works there.
         val nextRecorder = createRecorder(source, channelMask, bufferSize)
@@ -302,7 +311,10 @@ internal class MicrophoneUplink(
         val frame = ByteArray(config.frameBytes)
         val readBuffer = ByteArray(maxOf(frame.size, MIN_READ_BYTES))
         val rawBuffer = if (actualSampleRate != config.sampleRate) {
-            ByteArray(maxOf(readBuffer.size * 2, MIN_READ_BYTES * 2))
+            // Size the capture buffer by the rate ratio: input bytes per frame
+            // period scale with the capture rate, so one full read converts
+            // into readBuffer without the converters truncating its tail.
+            ByteArray(readBuffer.size * actualSampleRate / config.sampleRate)
         } else {
             readBuffer
         }
@@ -338,6 +350,10 @@ internal class MicrophoneUplink(
                         downsample48To24(rawBuffer, count, readBuffer)
                     actualSampleRate == 16000 && config.sampleRate == 24000 ->
                         upsample16To24(rawBuffer, count, readBuffer)
+                    actualSampleRate == 48000 && config.sampleRate == 32000 ->
+                        downsample48To32(rawBuffer, count, readBuffer)
+                    actualSampleRate == 16000 && config.sampleRate == 32000 ->
+                        upsample16To32(rawBuffer, count, readBuffer)
                     else -> count
                 }
                 var offset = 0
@@ -579,6 +595,47 @@ internal class MicrophoneUplink(
                 output[outIdx + 5] = ((s1 shr 8) and 0xFF).toByte()
             }
             return maxPairs * 6
+        }
+
+        internal fun downsample48To32(input: ByteArray, inputCount: Int, output: ByteArray): Int {
+            val samplesIn = inputCount / 2
+            val groups = samplesIn / 3
+            val maxGroups = minOf(groups, output.size / 4)
+            for (g in 0 until maxGroups) {
+                val inIdx = g * 6
+                val s0 = ((input[inIdx].toInt() and 0xFF) or (input[inIdx + 1].toInt() shl 8)).toShort().toInt()
+                val s1 = ((input[inIdx + 2].toInt() and 0xFF) or (input[inIdx + 3].toInt() shl 8)).toShort().toInt()
+                val s2 = ((input[inIdx + 4].toInt() and 0xFF) or (input[inIdx + 5].toInt() shl 8)).toShort().toInt()
+                val outIdx = g * 4
+                output[outIdx] = (s0 and 0xFF).toByte()
+                output[outIdx + 1] = ((s0 shr 8) and 0xFF).toByte()
+                val avg = (s1 + s2) / 2
+                output[outIdx + 2] = (avg and 0xFF).toByte()
+                output[outIdx + 3] = ((avg shr 8) and 0xFF).toByte()
+            }
+            return maxGroups * 4
+        }
+
+        internal fun upsample16To32(input: ByteArray, inputCount: Int, output: ByteArray): Int {
+            val samplesIn = inputCount / 2
+            val pairs = samplesIn / 2
+            val maxPairs = minOf(pairs, output.size / 8)
+            for (i in 0 until maxPairs) {
+                val inIdx = i * 4
+                val s0 = ((input[inIdx].toInt() and 0xFF) or (input[inIdx + 1].toInt() shl 8)).toShort().toInt()
+                val s1 = ((input[inIdx + 2].toInt() and 0xFF) or (input[inIdx + 3].toInt() shl 8)).toShort().toInt()
+                val mid = (s0 + s1) / 2
+                val outIdx = i * 8
+                output[outIdx] = (s0 and 0xFF).toByte()
+                output[outIdx + 1] = ((s0 shr 8) and 0xFF).toByte()
+                output[outIdx + 2] = (mid and 0xFF).toByte()
+                output[outIdx + 3] = ((mid shr 8) and 0xFF).toByte()
+                output[outIdx + 4] = (s1 and 0xFF).toByte()
+                output[outIdx + 5] = ((s1 shr 8) and 0xFF).toByte()
+                output[outIdx + 6] = (s1 and 0xFF).toByte()
+                output[outIdx + 7] = ((s1 shr 8) and 0xFF).toByte()
+            }
+            return maxPairs * 8
         }
     }
 }
