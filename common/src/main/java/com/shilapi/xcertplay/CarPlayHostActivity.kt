@@ -5166,7 +5166,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     /**
      * Issue #290: true while [bounds] is a transitional shrink below the size the
-     * latest grow re-add just established, inside the same settle window the
+     * surface was established at (initial creation, #363, or the latest grow
+     * re-add), inside the same settle window the
      * reapply listener uses (3 s). A genuine later shrink (a new reverse entry)
      * either exceeds the re-added size or arrives after the window and applies
      * normally.
@@ -5199,6 +5200,17 @@ class CarPlayHostActivity : ComponentActivity() {
             if (fallbackVideoBounds != bounds && !transitionalShrink) {
                 val previousBounds = fallbackVideoBounds
                 fallbackVideoBounds = bounds
+                if (previousBounds == null && bounds.width > 0 && bounds.height > 0) {
+                    // Issue #363: the transitional-shrink guard below was only
+                    // armed by the grow re-add, so a surface created directly
+                    // at its full size (Activity resume) had no baseline: the
+                    // settle shrink ~1 s later applied and latched, leaving
+                    // black borders. Arm the same baseline at first
+                    // establishment; a genuine shrink after the window still
+                    // applies normally.
+                    surfaceReaddBounds = bounds
+                    surfaceReaddAtMs = SystemClock.elapsedRealtime()
+                }
                 fallback.layoutParams = FrameLayout.LayoutParams(bounds.width, bounds.height,
                     Gravity.TOP or Gravity.LEFT).apply {
                     leftMargin = bounds.left
