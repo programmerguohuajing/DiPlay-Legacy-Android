@@ -241,11 +241,18 @@ class HostapdHotspotManager(
             // directory all print here. Bounded to ~2s, killed afterwards,
             // and the next start's killStale cleans up if the kill misses.
             // Once per manager: later retries fail identically.
+            // The probe asks the daemon to write its OWN log file (-f) at
+            // debug verbosity (-dd) instead of relying on shell redirection:
+            // on the affected Honda units both redirected logs (hapd.log and
+            // the earlier probe log) came back empty on every failure while
+            // the daemon demonstrably started and died — its messages never
+            // reached stdout/stderr there.
             var fgProbe = ""
             if (!foregroundProbeDone) {
                 foregroundProbeDone = true
                 val probeCmd =
-                    "$hostapdPath ${HostapdConfig.CONF_PATH} >${HostapdConfig.FG_PROBE_LOG_PATH} 2>&1 & FG=\$!; sleep 2; " +
+                    "rm -f ${HostapdConfig.FG_PROBE_LOG_PATH}; " +
+                    "$hostapdPath -dd -f ${HostapdConfig.FG_PROBE_LOG_PATH} ${HostapdConfig.CONF_PATH} & FG=\$!; sleep 2; " +
                         "if kill -0 \$FG 2>/dev/null; then echo FG_ALIVE; kill \$FG; sleep 1; else wait \$FG 2>/dev/null; echo FG_DEAD FG_EXIT=\$?; fi; " +
                         "ls -ld /data/local/tmp 2>/dev/null; cat ${HostapdConfig.FG_PROBE_LOG_PATH} 2>/dev/null"
                 val probeResult = runCatching { RootShell.run(probeCmd, 10_000) }.getOrNull()
