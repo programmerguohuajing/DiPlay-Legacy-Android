@@ -1,3 +1,10 @@
+# DiPlay 0.3.9 — 2026-10-30
+
+- Arm the transitional-shrink guard at surface establishment (#363): record the baseline size upon initial SurfaceView bounds establishment so transitional shrinks after Activity resume are ignored inside the 3s settle window, preventing latched black borders.
+- Do not release Bluetooth bootstrap while an RTSP handler is in flight (#316): defer post-transport USB Bluetooth teardown while `inFlight > 0`, preventing dropped bootstrap transport during multi-second pair-setup requests.
+
+See [v0.3.9 release notes](docs/RELEASE-NOTES-0.3.9.md) for details.
+
 # DiPlay 0.3.8 — 2026-10-30
 
 - Give 32000 Hz microphone requests fallback capture rates (#360): add 48000 Hz (with 3:2 downsample) and 16000 Hz (with 1:2 upsample) capture fallbacks for head units whose audio drivers return -1 on 32000 Hz minimum-buffer queries, fixing telephony uplink silence on RK3188 and similar platforms.

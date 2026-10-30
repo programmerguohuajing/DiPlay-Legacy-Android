@@ -33,8 +33,8 @@ android {
         multiDexEnabled = true
         multiDexKeepProguard = file("multidex-config.pro")
         testInstrumentationRunner = "com.shilapi.xcertplay.T3LegacyInstrumentation"
-        versionCode = 128
-        versionName = "0.3.8"
+        versionCode = 129
+        versionName = "0.3.9"
 
     }
 
