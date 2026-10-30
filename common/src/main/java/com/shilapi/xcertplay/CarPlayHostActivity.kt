@@ -428,6 +428,10 @@ class CarPlayHostActivity : ComponentActivity() {
     private var fallbackVideoBounds: CarPlaySurfaceBounds? = null
     /** Issue #290: size established by the latest grow re-add, with its timestamp. */
     private var surfaceReaddBounds: CarPlaySurfaceBounds? = null
+    // Issue #363: the view instance the shrink-guard baseline belongs to. A
+    // different instance means a newly created surface, whose first
+    // established size must arm the baseline (see updateVideoLayout).
+    private var surfaceBaselineView: SurfaceView? = null
     private var surfaceReaddAtMs: Long = 0L
 
     // Smooth video (a setting): SurfaceView output with frames released at the iPhone's frame time.
@@ -1568,6 +1572,7 @@ class CarPlayHostActivity : ComponentActivity() {
             touchOutsideContent = false
             refreshConfiguration(source = ThemeModeDiagnostics.Source.WINDOW_FOCUS)
             applyFullscreenMode()
+            scheduleHarmanFullscreenReassert()
 
             // Issues #251/#252: a reverse-camera overlay usually takes window focus
             // without pausing the activity, so onResume's picture refresh never runs
@@ -1742,6 +1747,7 @@ class CarPlayHostActivity : ComponentActivity() {
         currentSurfaceTexture = null
         fallbackVideoView = null
         fallbackVideoBounds = null
+        surfaceBaselineView = null
         sessionLog?.append("Activity destroyed")
         sessionLog?.close()
         if (crashDiagnosticLog === sessionLog) crashDiagnosticLog = null
@@ -5185,6 +5191,19 @@ class CarPlayHostActivity : ComponentActivity() {
         val fallback = fallbackVideoView
         if (fallback != null) {
             val bounds = CarPlaySurfaceBounds.from(content)
+            if (fallback !== surfaceBaselineView && bounds.width > 0 && bounds.height > 0) {
+                // Issue #363: arm the shrink-guard baseline from CREATION,
+                // not from a size change. The 0.3.9 arming sat inside the
+                // bounds-changed branch below; when a recreated surface's
+                // first size equalled the previous surface's last bounds
+                // (both 1024x600), that branch never ran, no baseline was
+                // recorded, and the settle shrink 0.7 s later applied
+                // unguarded. Keying on the view instance cannot miss:
+                // every new surface arms at the first size it establishes.
+                surfaceBaselineView = fallback
+                surfaceReaddBounds = bounds
+                surfaceReaddAtMs = SystemClock.elapsedRealtime()
+            }
             // Issue #290 (0.3.5 retest): right after the grow re-add below recreates
             // the Surface at the restored size, the video view passes through a
             // transitional smaller size; fitting to it would setFixedSize the new
@@ -6264,6 +6283,22 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun scrollLogsToBottom() {
         statusScrollView?.post {
             statusScrollView?.fullScroll(View.FOCUS_DOWN)
+        }
+    }
+
+    /**
+     * Issue #363: with the legacy fullscreen mode, a reverse-camera cycle
+     * re-shows the OEM bottom bar and the immediate re-apply on focus regain
+     * does not always suppress it again — the system overlay settles after
+     * the focus event. Re-assert the same flags a few times over the next
+     * ~1.5 s. No-op unless the legacy mode is enabled.
+     */
+    private fun scheduleHarmanFullscreenReassert() {
+        if (!harmanFullscreenEnabled) return
+        for (delayMillis in longArrayOf(300L, 800L, 1500L)) {
+            mainHandler.postDelayed({
+                if (!isDestroyed && harmanFullscreenEnabled) applyFullscreenMode()
+            }, delayMillis)
         }
     }
 
