@@ -654,6 +654,7 @@
     <string name="settings_direct_surface_view_description">Utiliza superposiciones de hardware nativas de SurfaceView directamente en lugar de TextureView, omitiendo la composición de la GPU y reduciendo en gran medida la carga en unidades principales de gama baja. Los ajustes de imagen no se aplican. Reconecta CarPlay.</string>
     <string name="bluetooth_adapter_unavailable">La unidad principal no tiene adaptador Bluetooth nativo; CarPlay inalámbrico no disponible. Use un cable USB con cable.</string>
     <string name="usb_iphone_busy_or_occupied">El USB del iPhone está ocupado por otra app (p. ej., reproductor de iPod del coche). Cierre la app y vuelva a conectar el cable.</string>
+    <string name="wired_usb_stall_replug_required">El iPhone no responde a las solicitudes de configuración USB (su estado USB está bloqueado). Desconecta el cable, reinicia el iPhone, vuelve a conectarlo y toca Reintentar.</string>
     <string name="usb_iphone_permission_not_granted">No se otorgó el permiso USB del iPhone. Compruebe las solicitudes de permisos, cierre la app de iPod y vuelva a conectar.</string>
     <string name="bluetooth_device_connected">Conectado</string>
     <string name="manual_input_mac">MAC manual</string>

@@ -717,6 +717,7 @@
     <string name="settings_direct_surface_view_description">使用系統原生硬體疊加圖層（SurfaceView）顯示畫面，繞過 GPU 視圖合成，大幅降低老舊低配車機（如 Android 4.4/6.0、聯發科 MT3561、全志 T3）的系統負載與卡頓。開啟後畫面色彩調節不可用。變更後會重新連線至 CarPlay。</string>
     <string name="bluetooth_adapter_unavailable">車機未提供原生藍牙適配器，無法進行無線連線引導。請在設定中切換為【有線連線】並使用 USB 傳輸線連線。</string>
     <string name="usb_iphone_busy_or_occupied">iPhone USB 介面被原車系統或其他應用程式佔用（如原車 iPod 播放器），請在車機中退出該應用並重新拔插傳輸線。</string>
+    <string name="wired_usb_stall_replug_required">iPhone 未回應 USB 配置請求（其 USB 狀態已卡死）。請拔下傳輸線、重啟 iPhone 並重新連接，然後點擊重試。</string>
     <string name="usb_iphone_permission_not_granted">未能取得 iPhone USB 權限（可能被原車系統攔截或未彈出授權視窗），請嘗試退出原車 iPod 播放器並重新插拔 USB。</string>
     <string name="bluetooth_device_connected">已連線</string>
     <string name="manual_input_mac">手動輸入 MAC</string>

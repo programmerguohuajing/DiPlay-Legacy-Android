@@ -666,6 +666,7 @@
     <string name="settings_direct_surface_view_description">Використовує апаратні накладання SurfaceView напряму замість TextureView, оминаючи композицію GPU та значно зменшуючи навантаження на бюджетних автомагнітолах. Налаштування картинки не застосовуються. Перепідключає CarPlay.</string>
     <string name="bluetooth_adapter_unavailable">В автомагнітолі немає вбудованого адаптера Bluetooth; бездротовий CarPlay недоступний. Використовуйте дротове підключення через USB.</string>
     <string name="usb_iphone_busy_or_occupied">USB-порт iPhone зайнятий іншою програмою (наприклад, штатним плеєром iPod). Закрийте плеєр iPod і перепідключіть кабель.</string>
+    <string name="wired_usb_stall_replug_required">iPhone не відповідає на запити конфігурації USB (стан USB завис). Відключіть кабель, перезавантажте iPhone, підключіть його знову та натисніть «Повторити».</string>
     <string name="usb_iphone_permission_not_granted">Дозвіл USB для iPhone не отримано. Перевірте запит дозволів, закрийте плеєр iPod і перепідключіть кабель.</string>
     <string name="bluetooth_device_connected">Підключено</string>
     <string name="manual_input_mac">Ввести MAC вручну</string>

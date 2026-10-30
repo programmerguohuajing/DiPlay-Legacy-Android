@@ -138,6 +138,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var wiredNoTcpFailures = 0
     /** Issue #305: consecutive wired USB-busy (EBUSY) failures. */
     private var wiredUsbBusyFailures = 0
+    private var wiredUsbStallFailures = 0
     private val siriKey = WheelSiriKey()
     private val siriKeyPresses = WheelKeyPresses()
     private val legacySiriPresses = mutableSetOf<Triple<Int, Int, Int>>()
@@ -1839,6 +1840,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 reconnectAttempts = 0
                 wiredNoTcpFailures = 0
                 wiredUsbBusyFailures = 0
+                wiredUsbStallFailures = 0
                 visibility = View.GONE
                 restartCarPlay(getString(R.string.connecting_to_your_iphone))
             }
@@ -4548,6 +4550,7 @@ class CarPlayHostActivity : ComponentActivity() {
                     reconnectAttempts = 0
                     wiredNoTcpFailures = 0
                     wiredUsbBusyFailures = 0
+                    wiredUsbStallFailures = 0
                     logThemeState(ThemeModeDiagnostics.Source.SESSION_ACTIVE, resources.configuration)
                     syncAirPlayDarkMode(ThemeModeDiagnostics.Source.SESSION_ACTIVE)
                     if (menuOpen) return@runOnUiThread
@@ -4688,6 +4691,7 @@ class CarPlayHostActivity : ComponentActivity() {
             is CarPlayStatus.WaitingForIphone -> {
                 wiredNoTcpFailures = 0
                 wiredUsbBusyFailures = 0
+                wiredUsbStallFailures = 0
             }
             is CarPlayStatus.Failed -> if (status.wifiResetRequired) {
                 wifiRecoveryButton?.visibility = View.VISIBLE
@@ -5487,6 +5491,24 @@ class CarPlayHostActivity : ComponentActivity() {
                 startupRetryStopped = true
                 startupRetryButton?.visibility = View.VISIBLE
                 setConnectionStage(getString(R.string.usb_iphone_busy_or_occupied))
+                return
+            }
+        }
+        // Issue #359: after an ENODEV drop the iPhone's USB state can wedge so
+        // that every configuration request stalls outright; the outer loop then
+        // repeats the identical failure forever (200+ STALLs in the reporter's
+        // log, backoff already at its cap). Mirror the busy stop: after a few
+        // consecutive all-stalled failures, stop the automatic loop and ask
+        // for the phone-side reset that unwedges it (unplug + restart the
+        // iPhone). The STALL hint only appears when every attempt of a
+        // configuration request stalled, which is exactly the wedged state.
+        if (!wirelessEnabled && reason.contains("USB STALL", ignoreCase = true)) {
+            wiredUsbStallFailures += 1
+            if (wiredUsbStallFailures >= WIRED_USB_STALL_FAILURE_LIMIT) {
+                appendLog("wired USB stall failures=$wiredUsbStallFailures; automatic retry stopped, iPhone restart required generation=$restartGeneration")
+                startupRetryStopped = true
+                startupRetryButton?.visibility = View.VISIBLE
+                setConnectionStage(getString(R.string.wired_usb_stall_replug_required))
                 return
             }
         }
@@ -6344,6 +6366,7 @@ class CarPlayHostActivity : ComponentActivity() {
         const val WIRED_NO_TCP_FAILURE_LIMIT = 2
         /** Issue #305: automatic wired USB-busy retries allowed before asking for a physical replug. */
         const val WIRED_USB_BUSY_FAILURE_LIMIT = 3
+        const val WIRED_USB_STALL_FAILURE_LIMIT = 3
         const val IAP_TUNNEL_RECONNECT_DELAY_MILLIS = 15_000L
         /**
          * Issue #188 follow-up: a human cannot read and dismiss the system VPN

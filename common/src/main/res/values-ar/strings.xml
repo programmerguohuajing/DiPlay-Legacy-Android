@@ -654,6 +654,7 @@
     <string name="settings_direct_surface_view_description">يستخدم تراكبات أجهزة SurfaceView الأصلية مباشرة بدلاً من TextureView، متجاوزًا تركيب GPU ومقللًا بشكل كبير من عبء وحدة المعالجة المركزية ووحدة معالجة الرسومات في الوحدات الرئيسية منخفضة الأداء. لا تنطبق إعدادات الصورة. يعيد توصيل CarPlay.</string>
     <string name="bluetooth_adapter_unavailable">لا تحتوي الوحدة الرئيسية على محول بلوتوث أصلي؛ لا يتوفر CarPlay اللاسلكي. يرجى استخدام كابل USB سلكي.</string>
     <string name="usb_iphone_busy_or_occupied">منفذ USB الخاص بـ iPhone مشغول أو مستخدم بواسطة تطبيق آخر (مثل مشغل iPod بالسيارة). أغلق مشغل iPod وأعد توصيل الكابل.</string>
+    <string name="wired_usb_stall_replug_required">لا يستجيب iPhone لطلبات تكوين USB (حالة USB عالقة). افصل الكابل، وأعد تشغيل iPhone، وأعد توصيله، ثم انقر على إعادة المحاولة.</string>
     <string name="usb_iphone_permission_not_granted">لم يتم منح إذن USB لـ iPhone. تحقق من موجه الأذونات، وأغلق تطبيق iPod للسيارة، وأعد التوصيل.</string>
     <string name="bluetooth_device_connected">متصل</string>
     <string name="manual_input_mac">إدخال MAC يدوياً</string>
