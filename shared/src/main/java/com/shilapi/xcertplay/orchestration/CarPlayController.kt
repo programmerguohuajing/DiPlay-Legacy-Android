@@ -2242,16 +2242,34 @@ class CarPlayController(
         if (!wirelessPostTransportConfigurationSent.get() || wirelessTcpAcceptedAtMs.get() == 0L ||
             !wirelessBootstrapReleaseScheduled.compareAndSet(false, true)) return
         wirelessDiagnostic("post-transport config and AirPlay TCP are both present; USB Bluetooth release scheduled in ${WIRELESS_TCP_BT_RELEASE_DELAY_MILLIS}ms")
+        scheduleWirelessBluetoothBootstrapRelease(generation, WIRELESS_TCP_BT_RELEASE_DELAY_MILLIS)
+    }
+
+    private fun scheduleWirelessBluetoothBootstrapRelease(generation: Int, delayMillis: Long) {
         startupTimer.schedule({
             if (closed || phase != Phase.WIRELESS || generation != wirelessGeneration.get() ||
                 activeSession != null || wirelessActiveReported.get()) {
                 wirelessDiagnostic("delayed USB Bluetooth release canceled: wireless state changed")
                 return@schedule
             }
+            // Issue #316: this fixed delay can fire in the middle of a long
+            // RTSP handler — on the reporter's unit pair-setup took 18 s
+            // while the release closed the bootstrap transport under it and
+            // the control channel died with the request still unanswered.
+            // A handler in flight is progress, not a stall: wait for it,
+            // like the quiet-release path above does. If the handler truly
+            // hangs, the session-recovery deadline still fails the session
+            // and the state guard above cancels this release.
+            val inFlight = wirelessAirPlayRequestsInFlight.get()
+            if (inFlight > 0) {
+                wirelessDiagnostic("delayed USB Bluetooth release deferred; RTSP handler still running inFlight=$inFlight")
+                scheduleWirelessBluetoothBootstrapRelease(generation, WIRELESS_BOOTSTRAP_RELEASE_RECHECK_MILLIS)
+                return@schedule
+            }
             wirelessDiagnostic("releasing USB Bluetooth after post-transport AirPlay TCP; RTSP inFlight=${wirelessAirPlayRequestsInFlight.get()}")
             shutdownUsbBluetoothForStalledHandoff()
             closeBluetoothBootstrapTransport()
-        }, WIRELESS_TCP_BT_RELEASE_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+        }, delayMillis, TimeUnit.MILLISECONDS)
     }
 
     private fun wirelessDiagnostic(message: String) {
