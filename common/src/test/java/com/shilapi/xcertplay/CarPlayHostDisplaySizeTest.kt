@@ -216,6 +216,9 @@ class CarPlayHostDisplaySizeTest {
     }
 
     @Suppress("DEPRECATION")
+    // Issue #363: the flags gained IMMERSIVE_STICKY (0x1000) — without it a
+    // system overlay re-shown by a reverse-camera cycle was never hidden
+    // again. The exact value stays pinned so any further change is deliberate.
     @Test fun harmanFullscreenUsesTheVerifiedLegacyFlags() {
         setField("harmanFullscreenEnabled", true)
         setField("hideTopBar", false)
@@ -223,7 +226,7 @@ class CarPlayHostDisplaySizeTest {
 
         invoke("applyFullscreenMode")
 
-        assertEquals(0x080e, activity.window.decorView.systemUiVisibility)
+        assertEquals(0x180e, activity.window.decorView.systemUiVisibility)
     }
 
     @Suppress("DEPRECATION")
