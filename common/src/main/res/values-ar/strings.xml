@@ -709,6 +709,8 @@
     <string name="settings_carplay_auto_disconnect_bt_description">بعد اتصال CarPlay اللاسلكي، يوقف بلوتوث وحدة السيارة حتى لا تظهر شاشة مكالمات البلوتوث الأصلية؛ ويُعاد تشغيل البلوتوث عند انتهاء الجلسة. لاسلكي فقط، ويُطبق عند الاتصال التالي. إذا خرج التطبيق بشكل غير طبيعي، قد يبقى البلوتوث مطفأً — أعد تشغيله يدويًا من إعدادات النظام.</string>
     <string name="settings_telephony_downlink_via_music">توجيه الصوت الهابط للمكالمة عبر دفق الموسيقى (تجريبي)</string>
     <string name="settings_telephony_downlink_via_music_description">توجيه الصوت الهابط للمكالمة عبر دفق الموسيقى بدلا من دفق الاتصال، مع بقاء وضع المكالمة ورفع الميكروفون دون تغيير. استخدم هذا فقط إذا كان الصوت الهابط للمكالمة صامتا على دفق الاتصال بينما يعمل صوت الوسائط. يسري عند الاتصال التالي.</string>
+    <string name="settings_announcement_duck_media">خفض صوت الوسائط أثناء التنبيهات الصوتية (تجريبي)</string>
+    <string name="settings_announcement_duck_media_description">أثناء تشغيل صوت التوجيه أو المساعد أو المكالمة فعليا، يخفض DiPlay صوت الوسائط داخليا ويعيده بعد نحو ثانية من انتهاء التنبيه. يؤثر فقط في الصوت الذي يشغله DiPlay نفسه، ولا يغير مستوى صوت النظام أبدا. يسري عند الاتصال التالي.</string>
     <string name="settings_hostapd_channel">قناة نقطة الاتصال</string>
     <string name="settings_hostapd_channel_description">2.4 غيغاهرتز فقط (القنوات 1–13). القناة 1 هي الأكثر توافقًا.</string>
     <string name="hotspot_mode_hostapd">نقطة اتصال الجذر (hostapd)</string>

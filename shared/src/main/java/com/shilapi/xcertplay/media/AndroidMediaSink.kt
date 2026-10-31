@@ -53,6 +53,8 @@ internal class AudioFocusCoordinator(
     private val nowNs: () -> Long = System::nanoTime,
     /** Issue #290: true requests AUDIOFOCUS_GAIN for media; false keeps MAY_DUCK. */
     private val mediaFocusExclusive: Boolean = false,
+    /** Issue #364: duck media on announcement frame activity (experimental). */
+    private val announcementDuckEnabled: Boolean = false,
 ) {
     private data class Entry(val channel: AudioChannel, val attributes: Any?, var appliedVolume: Float = FULL_VOLUME)
 
@@ -61,6 +63,14 @@ internal class AudioFocusCoordinator(
     private var request: Any? = null
     private var requestedChannel: AudioChannel? = null
     private var mediaVolume = FULL_VOLUME
+    /** Issue #364: the volume the focus side last asked for, before the
+     * announcement duck is composed in; [mediaVolume] stays the effective one. */
+    private var focusVolume = FULL_VOLUME
+    private var announcementDucking = false
+    private var announcementChannel: AudioChannel? = null
+    /** Wall clock of the last announcement-channel PCM write; only read by the release check. */
+    @Volatile private var lastAnnouncementNanos = 0L
+    @Volatile private var announcementTimerArmed = false
     private var closed = false
     private var focusGeneration = 0L
     private var currentListener = listenerFor(focusGeneration)
@@ -104,15 +114,15 @@ internal class AudioFocusCoordinator(
             }
             runCatching { report("Audio: focus change=$change activeTracks=${active.size}") }
             when (change) {
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> setMediaVolume(DUCKED_VOLUME)
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> setFocusVolume(DUCKED_VOLUME)
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                     if (muteMediaOnTransientLoss) {
                         // This reports a temporary Android focus owner, not a confirmed call.
                         Log.i(TAG, "Audio: muting media during transient focus loss")
-                        setMediaVolume(0f)
+                        setFocusVolume(0f)
                     }
                 }
-                AudioManager.AUDIOFOCUS_GAIN -> setMediaVolume(FULL_VOLUME)
+                AudioManager.AUDIOFOCUS_GAIN -> setFocusVolume(FULL_VOLUME)
                 // Keep CarPlay audio running on permanent loss. Some head units
                 // do not send a later gain callback after taking focus back.
             }
@@ -121,7 +131,12 @@ internal class AudioFocusCoordinator(
 
     @Synchronized
     fun acquire(track: AudioTrack, channel: AudioChannel, attributes: Any?) {
-        if (closed || !enabled || manager == null) return
+        // Issue #364: the announcement duck needs the per-track volume
+        // bookkeeping even when system focus requests are off, so track
+        // registration also runs for the duck alone; refreshRequest() itself
+        // stays gated on the focus setting and issues no request then.
+        if (closed || manager == null) return
+        if (!enabled && !announcementDuckEnabled) return
         active[track] = Entry(channel, attributes)
         // Issue #214: navigation alone gets no sound on some head units because the audio
         // output stays muted without focus. Let a lone navigation track take focus to open
@@ -151,13 +166,18 @@ internal class AudioFocusCoordinator(
         if (closed) return
         closed = true
         active.clear()
+        announcementDucking = false
+        announcementTimerArmed = false
+        announcementChannel = null
         refreshRequest()
     }
 
     private fun refreshRequest() {
+        if (!enabled) return
         val primary = active.values.maxByOrNull { it.channel.focusPriority() }
         if (primary == null) {
             focusGeneration += 1
+            focusVolume = FULL_VOLUME
             mediaVolume = FULL_VOLUME
             abandonFocusLocked()
             return
@@ -189,7 +209,7 @@ internal class AudioFocusCoordinator(
         requestedChannel = primary.channel
         val result = if (realSdkInt() >= 26 && next != null) manager?.requestAudioFocus(next as AudioFocusRequest)
         else manager?.requestAudioFocus(currentListener, AudioManager.STREAM_MUSIC, gain)
-        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setMediaVolume(FULL_VOLUME)
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) setFocusVolume(FULL_VOLUME)
         val line = "Audio: focus requested channel=${primary.channel} gain=$gain granted=$result activeTracks=${active.size}"
         Log.i(TAG, line)
         runCatching { report(line) }
@@ -255,6 +275,73 @@ internal class AudioFocusCoordinator(
         idleHandler.postDelayed(idleRelease, recheckMillis)
     }
 
+    /**
+     * Issue #364: focus events state the volume they want in [focusVolume];
+     * the effective media volume composes that with the announcement duck,
+     * so neither side can undo the other early. A focus gain during an
+     * announcement does not restore full volume before the announcement
+     * ends, and a transient-loss mute (0f) always wins over the duck level.
+     * While the duck experiment is off the announcement flag is never set
+     * and this is exactly the old direct setMediaVolume call.
+     */
+    private fun setFocusVolume(volume: Float) {
+        focusVolume = volume
+        setMediaVolume(if (announcementDucking) minOf(volume, DUCKED_VOLUME) else volume)
+    }
+
+    /**
+     * Issue #364 (experimental, off by default): called from an announcement
+     * channel's audio writer on every accepted PCM write. CarPlay keeps the
+     * navigation track resident for a whole session, so track lifetime is
+     * the wrong signal — only frames actually flowing count as an
+     * announcement. While frames flow, media is ducked to [DUCKED_VOLUME]
+     * (composed with the focus side via [setFocusVolume]); about
+     * [ANNOUNCEMENT_RELEASE_MILLIS] after the last frame, the release check
+     * restores whatever volume the focus side currently wants.
+     */
+    fun onAnnouncementFrame(channel: AudioChannel) {
+        if (!announcementDuckEnabled || closed) return
+        if (channel == AudioChannel.MEDIA) return
+        lastAnnouncementNanos = nowNs()
+        synchronized(this) {
+            if (closed) return
+            if (!announcementDucking) {
+                announcementDucking = true
+                announcementChannel = channel
+                val line = "Audio: announcement duck engaged channel=$channel"
+                Log.i(TAG, line)
+                runCatching { report(line) }
+                setMediaVolume(minOf(focusVolume, DUCKED_VOLUME))
+            }
+            if (announcementTimerArmed) return
+            announcementTimerArmed = true
+        }
+        idleHandler.postDelayed(announcementRelease, ANNOUNCEMENT_RELEASE_MILLIS)
+    }
+
+    private val announcementRelease: Runnable = Runnable {
+        val recheckMillis: Long
+        synchronized(this) {
+            announcementTimerArmed = false
+            if (closed || !announcementDucking) return@Runnable
+            val idleNanos = nowNs() - lastAnnouncementNanos
+            if (idleNanos < ANNOUNCEMENT_RELEASE_NANOS) {
+                recheckMillis = (ANNOUNCEMENT_RELEASE_NANOS - idleNanos) / 1_000_000L + IDLE_RECHECK_MILLIS
+                announcementTimerArmed = true
+            } else {
+                announcementDucking = false
+                val line = "Audio: announcement duck released channel=$announcementChannel" +
+                    " after ${idleNanos / 1_000_000L}ms without announcement PCM"
+                announcementChannel = null
+                Log.i(TAG, line)
+                runCatching { report(line) }
+                setMediaVolume(focusVolume)
+                return@Runnable
+            }
+        }
+        idleHandler.postDelayed(announcementRelease, recheckMillis)
+    }
+
     private fun setMediaVolume(volume: Float) {
         mediaVolume = volume
         active.forEach { (track, entry) -> applyMediaVolume(track, entry) }
@@ -279,6 +366,10 @@ internal class AudioFocusCoordinator(
         const val TAG = "DiPlay-AudioFocus"
         const val FULL_VOLUME = 1f
         const val DUCKED_VOLUME = 0.2f
+        /** Issue #364: hold the duck briefly past the last announcement frame
+         * so a prompt split into bursts does not pump the media volume. */
+        const val ANNOUNCEMENT_RELEASE_MILLIS = 1_500L
+        const val ANNOUNCEMENT_RELEASE_NANOS = ANNOUNCEMENT_RELEASE_MILLIS * 1_000_000L
         /** CarPlay media may pause between songs; only a long silence gives focus back. */
         const val IDLE_RELEASE_MILLIS = 10_000L
         const val IDLE_RELEASE_NANOS = IDLE_RELEASE_MILLIS * 1_000_000L
@@ -319,6 +410,8 @@ class AndroidMediaSink(
     private val advancedAudioChannelMapping: Boolean = false,
     /** Issue #343-Q1: route the call downlink through the music stream (experimental). */
     private val telephonyDownlinkViaMusic: Boolean = false,
+    /** Issue #364: duck media while announcement audio flows (experimental). */
+    private val announcementDuck: Boolean = false,
     private val audioFocusEnabled: Boolean = false,
     private val audioFocusAutoYield: Boolean = true,
     /** Issue #290: media focus exclusive mode; read per session, default keeps MAY_DUCK. */
@@ -362,6 +455,7 @@ class AndroidMediaSink(
         audioFocusAutoYield,
         onAudioDiagnostic,
         mediaFocusExclusive = mediaFocusExclusive,
+        announcementDuckEnabled = announcementDuck,
     )
 
     /** The media-key session may own Android's current focus request for this same sink. */
@@ -2729,6 +2823,10 @@ private class AudioRenderer(
             written += count
             // Keeps the focus lease alive only while audio is actually flowing.
             audioFocusCoordinator.onPcmRendered()
+            // Issue #364: announcement frame activity drives the active-duck
+            // experiment; the coordinator ignores media frames and stays
+            // inert while the setting is off.
+            mappedChannel?.let(audioFocusCoordinator::onAnnouncementFrame)
             val framesWritten = count / frameBytes
             totalWrittenFrames += framesWritten
             writtenFramesThisWindow += framesWritten

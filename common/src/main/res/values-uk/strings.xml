@@ -721,6 +721,8 @@
     <string name="settings_carplay_auto_disconnect_bt_description">Після підключення бездротового CarPlay вимикає Bluetooth головного пристрою, щоб екран виклику штатного Bluetooth більше не з’являвся; після завершення сеансу Bluetooth вмикається знову. Тільки бездротове підключення, діє з наступного підключення. У разі аварійного завершення застосунку Bluetooth може залишитися вимкненим — увімкніть його вручну в налаштуваннях системи.</string>
     <string name="settings_telephony_downlink_via_music">Спрямовувати низхідний звук виклику через музичний потік (експериментально)</string>
     <string name="settings_telephony_downlink_via_music_description">Спрямовувати низхідний звук виклику через музичний потік замість потоку телефонії, не змінюючи режим виклику та мікрофон. Використовуйте лише якщо низхідний звук виклику не чути в потоці телефонії, а звук мультимедіа працює. Діє з наступного підключення.</string>
+    <string name="settings_announcement_duck_media">Приглушувати мультимедіа під час підказок (експериментально)</string>
+    <string name="settings_announcement_duck_media_description">Поки реально звучить навігація, асистент або виклик, DiPlay знижує гучність мультимедіа всередині застосунку та повертає її приблизно через секунду після завершення підказки. Впливає лише на звук, який відтворює сам DiPlay, і ніколи не змінює системну гучність. Діє з наступного підключення.</string>
     <string name="settings_hostapd_channel">Канал точки доступу</string>
     <string name="settings_hostapd_channel_description">Лише 2,4 ГГц (канали 1–13). Канал 1 — найсумісніший.</string>
     <string name="hotspot_mode_hostapd">Root-точка доступу (hostapd)</string>

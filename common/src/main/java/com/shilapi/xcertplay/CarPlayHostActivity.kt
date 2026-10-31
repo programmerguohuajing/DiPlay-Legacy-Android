@@ -592,6 +592,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var hostapdAppleVendorIe = false
     private var carplayAutoDisconnectBt = false
     private var telephonyDownlinkViaMusic = false
+    private var announcementDuckMedia = false
     private var awaitingVpnConsent = false
     private var vpnConsentLaunchElapsed = 0L
     private var vpnConsentInstantDenyCount = 0
@@ -943,6 +944,7 @@ class CarPlayHostActivity : ComponentActivity() {
         hostapdAppleVendorIe = AirPlayPersistence.loadHostapdAppleVendorIe(this)
         carplayAutoDisconnectBt = AirPlayPersistence.loadCarplayAutoDisconnectBt(this)
         telephonyDownlinkViaMusic = AirPlayPersistence.loadTelephonyDownlinkViaMusic(this)
+        announcementDuckMedia = AirPlayPersistence.loadAnnouncementDuckMedia(this)
     }
 
     private fun requestStartupPrerequisites() {
@@ -4506,6 +4508,7 @@ class CarPlayHostActivity : ComponentActivity() {
             preferSoftwareHevcDecoder = hevcSoftwareDecoderEnabled,
             advancedAudioChannelMapping = advancedAudioChannelMapping,
             telephonyDownlinkViaMusic = telephonyDownlinkViaMusic,
+            announcementDuck = announcementDuckMedia,
             audioFocusEnabled = AirPlayPersistence.loadAudioFocusEnabled(this),
             audioFocusAutoYield = AirPlayPersistence.loadAudioFocusAutoYield(this),
             mediaFocusExclusive = AirPlayPersistence.loadMediaFocusExclusive(this),

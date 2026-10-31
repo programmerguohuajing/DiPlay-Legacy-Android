@@ -82,6 +82,7 @@ object AirPlayPersistence {
     private const val KEY_HOSTAPD_APPLE_VENDOR_IE = "hostapd_apple_vendor_ie"
     private const val KEY_CARPLAY_AUTO_DISCONNECT_BT = "carplay_auto_disconnect_bt"
     private const val KEY_TELEPHONY_DOWNLINK_VIA_MUSIC = "telephony_downlink_via_music"
+    private const val KEY_ANNOUNCEMENT_DUCK_MEDIA = "announcement_duck_media"
     private const val KEY_DEBUG_LOGS_ENABLED = "debug_logs_enabled"
     private const val KEY_MANUFACTURER = "manufacturer"
     private const val KEY_MODEL = "model"
@@ -758,6 +759,14 @@ object AirPlayPersistence {
 
     fun saveTelephonyDownlinkViaMusic(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_TELEPHONY_DOWNLINK_VIA_MUSIC, enabled).apply()
+    }
+
+    /** Issue #364: duck media while announcement audio flows (Advanced, experimental). */
+    fun loadAnnouncementDuckMedia(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ANNOUNCEMENT_DUCK_MEDIA, false)
+
+    fun saveAnnouncementDuckMedia(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ANNOUNCEMENT_DUCK_MEDIA, enabled).apply()
     }
 
     fun loadHostapdSsid(context: Context): String =

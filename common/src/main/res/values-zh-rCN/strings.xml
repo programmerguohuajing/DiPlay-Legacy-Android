@@ -788,6 +788,8 @@
     <string name="settings_carplay_auto_disconnect_bt_description">无线 CarPlay 连上后，关闭车机蓝牙，让手机不再弹出原生蓝牙通话界面；会话结束时再把蓝牙打开。仅无线连接生效，下次连接时生效。如果应用异常退出，蓝牙可能保持关闭，需在系统设置里手动重新打开。</string>
     <string name="settings_telephony_downlink_via_music">通话下行改走音乐流（实验性）</string>
     <string name="settings_telephony_downlink_via_music_description">通话下行改走音乐流而不是通话流，通话模式和麦克风上行不变。仅当通话流下行无声、而媒体音频有声时使用。下次连接时生效。</string>
+    <string name="settings_announcement_duck_media">播报时压低媒体音量（实验性）</string>
+    <string name="settings_announcement_duck_media_description">导航、语音助手或通话声音实际播放时，在 DiPlay 内压低媒体音量，播报结束后约一秒恢复。仅对 DiPlay 自己播放的声音有效，不改变系统音量。下次连接时生效。</string>
     <string name="settings_hostapd_channel">热点信道</string>
     <string name="settings_hostapd_channel_description">仅 2.4 GHz（信道 1–13），信道 1 兼容性最好。</string>
     <string name="hotspot_mode_hostapd">Root 热点（hostapd）</string>

@@ -825,6 +825,8 @@
     <string name="settings_carplay_auto_disconnect_bt_description">After wireless CarPlay connects, disconnects the phone Bluetooth link (the head unit Bluetooth is turned off) so the native Bluetooth call screen stops popping up; Bluetooth is turned back on when the session ends. Wireless only, applies at the next connection. If the app exits abnormally, Bluetooth may stay off: turn it back on in system settings.</string>
     <string name="settings_telephony_downlink_via_music">Route the call downlink through the music stream (experimental)</string>
     <string name="settings_telephony_downlink_via_music_description">Route the call downlink through the music stream instead of the telephony stream, while call mode and the microphone uplink stay unchanged. Use this only if the call downlink is silent on the telephony stream while media audio works. Applies at the next connection.</string>
+    <string name="settings_announcement_duck_media">Duck media for announcements (experimental)</string>
+    <string name="settings_announcement_duck_media_description">While navigation, assistant or call audio is actually playing, lower the media volume inside DiPlay and restore it about a second after the announcement ends. It only affects sound that DiPlay itself plays, and it never changes the system volume. Applies at the next connection.</string>
     <string name="settings_hostapd_channel">Hotspot channel</string>
     <string name="settings_hostapd_channel_description">2.4 GHz only (channels 1–13). Channel 1 is the most compatible.</string>
     <string name="hotspot_mode_hostapd">Root hotspot (hostapd)</string>

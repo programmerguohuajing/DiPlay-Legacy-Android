@@ -777,6 +777,8 @@
     <string name="settings_carplay_auto_disconnect_bt_description">無線 CarPlay 連上後，關閉車機藍牙，讓手機不再彈出原生藍牙通話介面；工作階段結束時再把藍牙打開。僅無線連線生效，下次連線時生效。如果應用程式異常退出，藍牙可能保持關閉，需在系統設定裡手動重新打開。</string>
     <string name="settings_telephony_downlink_via_music">通話下行改走音樂流（實驗性）</string>
     <string name="settings_telephony_downlink_via_music_description">通話下行改走音樂流而不是通話流，通話模式和麥克風上行不變。僅當通話流下行無聲、而媒體音訊有聲時使用。下次連線時生效。</string>
+    <string name="settings_announcement_duck_media">播報時壓低媒體音量（實驗性）</string>
+    <string name="settings_announcement_duck_media_description">導航、語音助理或通話聲音實際播放時，在 DiPlay 內壓低媒體音量，播報結束後約一秒恢復。僅對 DiPlay 自己播放的聲音有效，不改變系統音量。下次連線時生效。</string>
     <string name="settings_hostapd_channel">熱點頻道</string>
     <string name="settings_hostapd_channel_description">僅 2.4 GHz（頻道 1–13），頻道 1 相容性最好。</string>
     <string name="hotspot_mode_hostapd">Root 熱點（hostapd）</string>

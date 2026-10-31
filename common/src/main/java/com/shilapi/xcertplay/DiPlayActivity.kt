@@ -1665,6 +1665,18 @@ class DiPlayActivity : ComponentActivity() {
                 AirPlayPersistence.saveTelephonyDownlinkViaMusic(this, it)
                 markReconnectNeeded()
             }
+            // Issue #364: some phones/head units never duck media for a
+            // navigation prompt, an assistant reply or a call, so the prompt
+            // fights the music at full volume. When this is on, frame
+            // activity on an announcement channel ducks the media
+            // renderer's gain inside the app and restores it shortly after
+            // the announcement ends. Applies at the next connection.
+            toggle(card, getString(R.string.settings_announcement_duck_media),
+                getString(R.string.settings_announcement_duck_media_description),
+                AirPlayPersistence.loadAnnouncementDuckMedia(this)) {
+                AirPlayPersistence.saveAnnouncementDuckMedia(this, it)
+                markReconnectNeeded()
+            }
         }
         filteredSection(content, SettingsSection.CAR_BUTTON,
             getString(R.string.car_button_in_carplay), R.drawable.ic_dp_car) { card -> carButtonCard = card; carButtonControls(card) }
