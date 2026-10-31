@@ -1,3 +1,11 @@
+# DiPlay 0.3.10 — 2026-10-31
+
+- Key the transitional-shrink guard by View instance (#363): record the baseline size when a fresh SurfaceView is created, even if its initial bounds match the previous surface, preventing latched settle shrinks and black borders.
+- Add IMMERSIVE_STICKY and delayed fullscreen reassertion (#363): include `SYSTEM_UI_FLAG_IMMERSIVE_STICKY` and re-assert fullscreen after regaining window focus, suppressing lingering OEM system bars after reverse camera cycles.
+- Capture hostapd log file directly via -dd -f in foreground probe (#330, #348): output daemon log directly to file during foreground failure probes instead of relying on shell redirection, capturing actual root causes on affected Honda units.
+
+See [v0.3.10 release notes](docs/RELEASE-NOTES-0.3.10.md) for details.
+
 # DiPlay 0.3.9 — 2026-10-30
 
 - Arm the transitional-shrink guard at surface establishment (#363): record the baseline size upon initial SurfaceView bounds establishment so transitional shrinks after Activity resume are ignored inside the 3s settle window, preventing latched black borders.
