@@ -70,9 +70,17 @@ class HostapdHotspotManager(
     override fun start(timeoutMillis: Long): WirelessHotspotInfo = try {
         startHotspot(timeoutMillis)
     } catch (error: Throwable) {
-        // A failed or cancelled start must not leave hostapd/dnsmasq running,
-        // the passphrase-bearing config on disk or Wi-Fi switched on behind.
-        teardown()
+        // A failed or cancelled start must not leave hostapd/dnsmasq running
+        // or the passphrase-bearing config on disk. It must NOT, however,
+        // touch the interface or the radio on the way out (issues #330/#348):
+        // on the affected Honda firmware, a failure teardown that downs
+        // wlan0 / disables Wi-Fi leaves the interface in a state where no
+        // later bind succeeds until the head unit reboots — proven by the
+        // reporter's control experiment (after a failed current-version
+        // start, even 0.2.97 could not bind until a reboot) and independently
+        // reported by the original backend contributor on a Civic. The full
+        // state restoration stays with close(), where the stop is deliberate.
+        teardown(restoreInterfaceState = false)
         throw error
     }
 
@@ -390,17 +398,27 @@ class HostapdHotspotManager(
      * state, and Wi-Fi again if this backend had to switch it on. Safe to call
      * more than once, and a no-op when [start] never changed anything.
      */
-    private fun teardown() {
+    private fun teardown(restoreInterfaceState: Boolean = true) {
         if (!touchedSystem) return
         touchedSystem = false
         runCatching {
-            RootShell.run(
-                HostapdConfig.killStaleScript() + "; ifconfig ${HostapdConfig.INTERFACE_NAME} down 2>/dev/null" +
-                    "; " + HostapdConfig.removeGeneratedFilesScript(),
-                10_000,
-            )
-            if (!wifiWasOn) {
-                RootShell.run("svc wifi disable", 10_000)
+            if (restoreInterfaceState) {
+                RootShell.run(
+                    HostapdConfig.killStaleScript() + "; ifconfig ${HostapdConfig.INTERFACE_NAME} down 2>/dev/null" +
+                        "; " + HostapdConfig.removeGeneratedFilesScript(),
+                    10_000,
+                )
+                if (!wifiWasOn) {
+                    RootShell.run("svc wifi disable", 10_000)
+                }
+            } else {
+                // Failure path (issues #330/#348): kill only this backend's
+                // daemons and remove the generated files; leave the interface
+                // up and the radio exactly as they are (see start()).
+                RootShell.run(
+                    HostapdConfig.killStaleScript() + "; " + HostapdConfig.removeGeneratedFilesScript(),
+                    10_000,
+                )
             }
         }
         started = false
