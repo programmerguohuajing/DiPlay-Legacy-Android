@@ -225,6 +225,17 @@ class CarPlayController(
     @Volatile private var uiListener: AirPlaySessionListener? = listener
     @Volatile private var uiStatusReporter: ((CarPlayStatus) -> Unit)? = reportStatus
     private val permissionGrant = AtomicBoolean(false)
+    // Issue #305: the session object whose MainAudio Untake has already been
+    // sent. An Untake makes the phone re-decide its streams; bursts of them
+    // (audio-focus flapping during establishment re-fires the callers) leave
+    // keyframe requests unanswered and the picture frozen, the same injury
+    // #293 proved for a wireless Untake. At most one Untake per session is
+    // meaningful anyway — nothing on this side takes MainAudio back in
+    // between — so repeats are suppressed per session identity.
+    @Volatile private var mainAudioUntakeSession: AirPlaySession? = null
+    // Issue #305: deviceId of the iPhone whose USB permission request is
+    // currently outstanding (0 = none); see doRequestIphonePermission.
+    @Volatile private var iphonePermissionRequestDeviceId: Int = 0
     private val availabilityPollGeneration = AtomicInteger(0)
     private var permissionPollGeneration = 0
     private var reenumerationAttempts = 0
@@ -524,12 +535,23 @@ class CarPlayController(
             debugLog("skipped resume changeModes for wireless session; retaining negotiated Screen and MainAudio ownership")
             return false
         }
+        if (mainAudioUntakeSession === session) {
+            // Issue #305: this session already yielded MainAudio once; the
+            // video-recovery callers of this function need the Screen Take,
+            // not a second Untake (see the field note).
+            debugLog("requesting CarPlay Screen (Take) via changeModes; MainAudio Untake already sent for this session")
+            return changeModes(
+                resources = listOf(linkedMapOf("resourceID" to 1, "transferType" to 1)),
+            )
+        }
         val resources = listOf(
             linkedMapOf("resourceID" to 1, "transferType" to 1), // Take Screen
             linkedMapOf("resourceID" to 2, "transferType" to 2), // Untake MainAudio
         )
         debugLog("requesting CarPlay MainAudio (Untake) and Screen (Take) via changeModes")
-        return changeModes(resources = resources)
+        val sent = changeModes(resources = resources)
+        if (sent) mainAudioUntakeSession = session
+        return sent
     }
 
     /**
@@ -547,11 +569,21 @@ class CarPlayController(
             debugLog("skipped MainAudio changeModes for wireless session; retaining negotiated MainAudio ownership")
             return false
         }
+        // Issue #305: suppress Untake repeats within the same session (see
+        // the field note) — the audio-focus listener and the touch reclaim
+        // can otherwise fire several inside seconds while a session is
+        // still establishing.
+        if (mainAudioUntakeSession === session) {
+            debugLog("skipped MainAudio changeModes; Untake already sent for this session")
+            return false
+        }
         val resources = listOf(
             linkedMapOf("resourceID" to 2, "transferType" to 2), // Untake MainAudio (iPhone outputs audio)
         )
         debugLog("requesting CarPlay MainAudio via changeModes (transferType=Untake)")
-        return changeModes(resources = resources)
+        val sent = changeModes(resources = resources)
+        if (sent) mainAudioUntakeSession = session
+        return sent
     }
 
     fun attachUi(
@@ -2598,15 +2630,29 @@ class CarPlayController(
 
     private fun doRequestIphonePermission(device: UsbDevice) {
         if (closed || wiredTeardownPending.get()) return
+        // Issue #305: several discovery/attach paths can ask for the same
+        // device within milliseconds (the reporter's log shows two requests
+        // 12 ms apart). Every extra system request replaces the previous
+        // one's dialog bookkeeping on these firmwares, and a detach racing
+        // the swap is then recorded as a denial. One outstanding request
+        // per device is enough — its result broadcast and poller are
+        // already running.
+        if (iphonePermissionRequestDeviceId == device.deviceId &&
+            !runCatching { requireUsbManager().hasPermission(device) }.getOrDefault(false)) {
+            debugLog("wired iPhone USB permission request already in flight for device ${device.deviceId}; not re-requesting")
+            return
+        }
         try {
             when (val request = iphoneHost.requestPermission(device)) {
                 is IphoneUsbHost.PermissionRequest.AlreadyGranted -> {
                     debugLog("wired iPhone USB permission already granted")
+                    iphonePermissionRequestDeviceId = 0
                     permissionGrant.set(false)
                     onIphonePermission(IphoneUsbHost.PermissionResult.Granted(request.device))
                 }
                 is IphoneUsbHost.PermissionRequest.Requested -> {
                     debugLog("wired iPhone USB permission requested")
+                    iphonePermissionRequestDeviceId = device.deviceId
                     permissionGrant.set(false)
                     onStatus(CarPlayStatus.RequestingIphonePermission)
                     pollIphonePermission(device)
@@ -2618,6 +2664,9 @@ class CarPlayController(
     }
 
     private fun onIphonePermission(result: IphoneUsbHost.PermissionResult) {
+        // Issue #305: whichever way the request resolved, it is no longer
+        // outstanding, so a later attach may ask again.
+        iphonePermissionRequestDeviceId = 0
         if (closed || wiredTeardownPending.get()) return
         try {
             when (result) {
@@ -2727,6 +2776,7 @@ class CarPlayController(
                         return
                     }
                     if (System.nanoTime() >= deadlineNanos) {
+                        iphonePermissionRequestDeviceId = 0
                         if (permissionGrant.compareAndSet(false, true)) {
                             onStatus(
                                 CarPlayStatus.Failed(
