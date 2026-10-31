@@ -64,6 +64,7 @@ class NcmUsbBridge internal constructor(
     private var ncmWriteSuccessBytes = 0
     /** Issue #279: the data-interface reset is attempted once per failure run. */
     private var interfaceResetAttempted = false
+    private var interfaceReclaimAttempted = false
     private val frames = ArrayDeque<ByteArray>()
     private var queuedBytes = 0
     private var buffered = ByteArray(0)
@@ -181,6 +182,10 @@ class NcmUsbBridge internal constructor(
                 interfaceResetAttempted = true
                 resetDataInterface()
             }
+            if (consecutiveWriteFailures == INTERFACE_RECLAIM_AT_FAILURE && !interfaceReclaimAttempted) {
+                interfaceReclaimAttempted = true
+                reclaimDataInterface()
+            }
             if (consecutiveWriteFailures >= MAX_CONSECUTIVE_WRITE_FAILURES) {
                 // USBMUX tears its whole session down for the same class of failure.
                 throw failSession(
@@ -196,6 +201,7 @@ class NcmUsbBridge internal constructor(
         }
         consecutiveWriteFailures = 0
         interfaceResetAttempted = false
+        interfaceReclaimAttempted = false
         if (loggedWriteTimeout) {
             loggedWriteTimeout = false
             Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out became ready")
@@ -605,6 +611,44 @@ class NcmUsbBridge internal constructor(
     }
 
     /**
+     * Issue #75: the heavier recovery rung, held back until a report carried
+     * the counter evidence — a full session whose submitted chunks never
+     * complete (completed stays 0 while the session otherwise reaches
+     * SUCCESS and inbound keeps flowing). Re-selecting the interface
+     * (resetDataInterface) cannot fix that class: usbfs may short-circuit
+     * SET_INTERFACE to the setting already in effect, and it never resets
+     * the host-side endpoint state. Releasing the data interface and
+     * claiming it again (forced), then re-selecting its alternate setting,
+     * rebuilds both sides' data pipes in place. Deliberately NOT a bus
+     * reset (issue #243: resets can wedge these kernels) and not a session
+     * teardown — the 25-failure failSession rung remains the last resort.
+     * Once per failure run; every step is best-effort and logged with the
+     * counters so a retest shows whether completions resume afterwards.
+     */
+    private fun reclaimDataInterface() {
+        val usbInterface = dataInterface
+        if (usbInterface == null) {
+            Log.i(IphoneCarPlayConfiguration.TAG, "ncm bulk-out recovery: no data interface recorded; skipping re-claim")
+            return
+        }
+        val released = runCatching { sharedConnection.releaseInterface(usbInterface) }.getOrDefault(false)
+        val claimed = runCatching { sharedConnection.claimInterface(usbInterface, true) }.getOrDefault(false)
+        val reselected = if (claimed) {
+            runCatching { LegacyUsbHostCompat.select(sharedConnection, usbInterface) }.getOrNull()
+        } else {
+            null
+        }
+        val line = "ncm bulk-out recovery: re-claimed data interface ${usbInterface.id} " +
+            "released=$released claimed=$claimed reselected=${reselected?.selected} " +
+            "errno=${reselected?.errno ?: "none"}; endpoint status: ${probeOutEndpointStatus()}; " +
+            "ncmCounts=enqueued=$ncmWriteEnqueuedFrames submitted=$ncmWriteSubmittedChunks " +
+            "completed=$ncmWriteCompletedChunks successBytes=$ncmWriteSuccessBytes"
+        Log.i(IphoneCarPlayConfiguration.TAG, line)
+        onDiagnostic(line)
+        clearOutEndpointHalt()
+    }
+
+    /**
      * The facts that decide which side owns a bulk-OUT failure: the alt setting the transfers
      * were queued against, the endpoint geometry the phone reported, and whether the kernel
      * exposes a netdev for the link at all.
@@ -736,6 +780,8 @@ class NcmUsbBridge internal constructor(
         private const val WATCHDOG_POLL_MILLIS = 500L
         /** Issue #279: consecutive failures at which the one-shot interface reset runs. */
         private const val INTERFACE_RESET_AT_FAILURE = 5
+        /** Issue #75: consecutive failures at which the one-shot interface re-claim runs. */
+        private const val INTERFACE_RECLAIM_AT_FAILURE = 12
         private const val ENDPOINT_STATUS_TIMEOUT_MILLIS = 500
         private const val NANOS_PER_MILLISECOND = 1_000_000L
         /** A failure that used less than 90% of its timeout never waited on the phone. */
