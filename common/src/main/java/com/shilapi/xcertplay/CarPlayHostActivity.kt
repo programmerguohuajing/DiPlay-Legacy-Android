@@ -377,19 +377,98 @@ class CarPlayHostActivity : ComponentActivity() {
     /** Issue #315: true between a legacy reverse-enter and its delayed cold start. */
     private var legacyReverseActive = false
 
-    /** Issue #315: delayed cold start after reverse exit; cancelled if reverse re-engages. */
-    private val legacyReverseResumeRunnable = Runnable {
-        if (activeAirPlaySession != null && !isDestroyed && !isFinishing) {
-            sink?.resumeVideoFromReverse(SCREEN_TYPE_MAIN)
-            reapplyVideoLayout()
-            fallbackVideoView?.invalidate()
+    /**
+     * True from any reverse-enter broadcast until the post-exit restore has
+     * run or stood down. Tracked independently of the #315 cold-start
+     * setting: the camera owning the screen is a fact about the display,
+     * not about which recovery strategy is enabled, and the focus-gain
+     * side effects below key off it.
+     */
+    private var reverseCameraActive = false
+    private var reverseCameraActiveSinceMs = 0L
+    private var reverseExitRestoreAttempts = 0
+    private var legacyReverseResumeAttempts = 0
+
+    /** Increments on every focus loss; delayed fullscreen re-asserts capture
+     * it so a loss-gain flap cannot leave flag churn running under an
+     * overlay that has already taken the screen back. */
+    private var windowFocusGeneration = 0L
+
+    /**
+     * Post-exit picture restore. An exit broadcast is a claim, not a proof:
+     * CAN status broadcasts flap (a momentary camera-off state in the
+     * middle of a manoeuvre), and rebuilding the video surface the instant
+     * one arrives lets the returning CarPlay picture displace a reverse
+     * camera that is still up — which then does not come back until the
+     * next gear change, leaving CarPlay on screen for the rest of the
+     * manoeuvre. So the restore waits briefly, runs only while this window
+     * actually holds focus (the camera owns focus while it is up),
+     * re-checks a few times, and is cancelled outright if reverse
+     * re-engages. When it stands down unfocused, the focus-gain refresh
+     * remains as the fallback for the genuine exit.
+     */
+    private val reverseExitRestoreRunnable: Runnable = Runnable {
+        if (isDestroyed || isFinishing || activeAirPlaySession == null) {
+            reverseCameraActive = false
+            return@Runnable
         }
+        if (!hasWindowFocus()) {
+            if (++reverseExitRestoreAttempts <= REVERSE_EXIT_RESTORE_MAX_ATTEMPTS) {
+                mainHandler.postDelayed(reverseExitRestoreRunnable, REVERSE_EXIT_RESTORE_RECHECK_MILLIS)
+            } else {
+                reverseCameraActive = false
+            }
+            return@Runnable
+        }
+        reverseCameraActive = false
+        sink?.refreshPicture(SCREEN_TYPE_MAIN)
+        reapplyVideoLayout()
+        fallbackVideoView?.invalidate()
+        mainHandler.postDelayed({
+            if (activeAirPlaySession != null && !isDestroyed && !isFinishing && hasWindowFocus()) {
+                sink?.refreshPicture(SCREEN_TYPE_MAIN)
+            }
+        }, 300)
+    }
+
+    /** Issue #315: delayed cold start after reverse exit; cancelled if reverse re-engages. */
+    private val legacyReverseResumeRunnable: Runnable = Runnable {
+        if (activeAirPlaySession == null || isDestroyed || isFinishing) {
+            reverseCameraActive = false
+            return@Runnable
+        }
+        // Same discipline as the post-exit restore: the delayed cold start
+        // must not rebuild the video while the camera still owns the
+        // screen (a flapped exit broadcast schedules it just the same);
+        // re-check briefly, then stand down to the focus-gain fallback.
+        if (!hasWindowFocus()) {
+            if (++legacyReverseResumeAttempts <= LEGACY_REVERSE_RESUME_MAX_ATTEMPTS) {
+                mainHandler.postDelayed(legacyReverseResumeRunnable, LEGACY_REVERSE_RESUME_RECHECK_MILLIS)
+            } else {
+                reverseCameraActive = false
+            }
+            return@Runnable
+        }
+        reverseCameraActive = false
+        sink?.resumeVideoFromReverse(SCREEN_TYPE_MAIN)
+        reapplyVideoLayout()
+        fallbackVideoView?.invalidate()
     }
 
     private fun handleReverseCameraEnter(source: String) {
+        // A (re-)engagement cancels any post-exit restore or cold start
+        // still waiting to run, whatever recovery strategy is enabled.
+        mainHandler.removeCallbacks(reverseExitRestoreRunnable)
+        mainHandler.removeCallbacks(legacyReverseResumeRunnable)
+        reverseExitRestoreAttempts = 0
+        legacyReverseResumeAttempts = 0
+        if (!reverseCameraActive) {
+            reverseCameraActive = true
+            reverseCameraActiveSinceMs = System.currentTimeMillis()
+            appendLog("Display: reverse camera started by broadcast source=$source")
+        }
         if (!AirPlayPersistence.loadLegacyReverseColdStart(this)) return
         if (activeAirPlaySession == null || isDestroyed || isFinishing) return
-        mainHandler.removeCallbacks(legacyReverseResumeRunnable)
         if (legacyReverseActive) return
         legacyReverseActive = true
         appendLog("Display: reverse camera started by broadcast source=$source; legacy cold start: decoder released")
@@ -401,6 +480,7 @@ class CarPlayHostActivity : ComponentActivity() {
         if (activeAirPlaySession == null || isDestroyed || isFinishing) return
         if (AirPlayPersistence.loadLegacyReverseColdStart(this) && legacyReverseActive) {
             legacyReverseActive = false
+            legacyReverseResumeAttempts = 0
             mainHandler.removeCallbacks(legacyReverseResumeRunnable)
             // Issue #315: on PF8227/MTK 8227L the hardware video channel
             // races the system reverse layer if the decoder comes back
@@ -410,16 +490,12 @@ class CarPlayHostActivity : ComponentActivity() {
             mainHandler.postDelayed(legacyReverseResumeRunnable, LEGACY_REVERSE_COLD_START_DELAY_MILLIS)
             return
         }
-        mainHandler.post {
-            sink?.refreshPicture(SCREEN_TYPE_MAIN)
-            reapplyVideoLayout()
-            fallbackVideoView?.invalidate()
-        }
-        mainHandler.postDelayed({
-            if (activeAirPlaySession != null && !isDestroyed && !isFinishing) {
-                sink?.refreshPicture(SCREEN_TYPE_MAIN)
-            }
-        }, 300)
+        // Not the immediate rebuild this used to be: see the restore
+        // runnable's note. The exit claim is debounced and focus-confirmed
+        // so a flapped broadcast cannot displace a camera that is still up.
+        reverseExitRestoreAttempts = 0
+        mainHandler.removeCallbacks(reverseExitRestoreRunnable)
+        mainHandler.postDelayed(reverseExitRestoreRunnable, REVERSE_EXIT_RESTORE_DELAY_MILLIS)
     }
 
     // The full-window viewport stays independent of the letterboxed SurfaceView dimensions.
@@ -1573,26 +1649,39 @@ class CarPlayHostActivity : ComponentActivity() {
             gestureTracking = false
             touchOutsideContent = false
             refreshConfiguration(source = ThemeModeDiagnostics.Source.WINDOW_FOCUS)
-            applyFullscreenMode()
-            scheduleHarmanFullscreenReassert()
+            // While a reverse camera is believed up, a focus gain is a flap
+            // in its arrival, not its departure: applying fullscreen flags
+            // and rebuilding the picture here disturbs the camera's tenure
+            // and can displace it for the rest of the manoeuvre. The
+            // post-exit restore runs the same work once the exit is real.
+            // The age cap keeps a never-cleared flag (a missed exit
+            // broadcast) from gating refreshes forever.
+            val reverseGateAgeMs = System.currentTimeMillis() - reverseCameraActiveSinceMs
+            if (reverseCameraActive && reverseGateAgeMs < REVERSE_ACTIVE_GATE_CAP_MILLIS) {
+                appendLog("Display: focus gained while reverse camera is active; fullscreen and picture refresh deferred to reverse exit")
+            } else {
+                applyFullscreenMode()
+                scheduleHarmanFullscreenReassert()
 
-            // Issues #251/#252: a reverse-camera overlay usually takes window focus
-            // without pausing the activity, so onResume's picture refresh never runs
-            // when it closes — the (still decoding) picture stayed black for seconds
-            // until the stream happened to refresh itself. Refresh on focus regain.
-            // Issue #290: the same cycle can leave the fitted video bounds at the
-            // shrunken camera size; focus regain is when the window size is final,
-            // so recompute the fit there too.
-            if (activeAirPlaySession != null) {
-                sink?.refreshPicture(SCREEN_TYPE_MAIN)
-                reapplyVideoLayout()
-                mainHandler.postDelayed({
-                    if (activeAirPlaySession != null && !isDestroyed && !isFinishing) {
-                        sink?.refreshPicture(SCREEN_TYPE_MAIN)
-                    }
-                }, 300)
+                // Issues #251/#252: a reverse-camera overlay usually takes window focus
+                // without pausing the activity, so onResume's picture refresh never runs
+                // when it closes — the (still decoding) picture stayed black for seconds
+                // until the stream happened to refresh itself. Refresh on focus regain.
+                // Issue #290: the same cycle can leave the fitted video bounds at the
+                // shrunken camera size; focus regain is when the window size is final,
+                // so recompute the fit there too.
+                if (activeAirPlaySession != null) {
+                    sink?.refreshPicture(SCREEN_TYPE_MAIN)
+                    reapplyVideoLayout()
+                    mainHandler.postDelayed({
+                        if (activeAirPlaySession != null && !isDestroyed && !isFinishing && hasWindowFocus()) {
+                            sink?.refreshPicture(SCREEN_TYPE_MAIN)
+                        }
+                    }, 300)
+                }
             }
         } else {
+            windowFocusGeneration++
             mainHandler.removeCallbacks(hideDockRunnable)
             dockEdgeSwipeActive = false
             dockCloseSwipeActive = false
@@ -6298,9 +6387,14 @@ class CarPlayHostActivity : ComponentActivity() {
      */
     private fun scheduleHarmanFullscreenReassert() {
         if (!harmanFullscreenEnabled) return
+        val generation = windowFocusGeneration
         for (delayMillis in longArrayOf(300L, 800L, 1500L)) {
             mainHandler.postDelayed({
-                if (!isDestroyed && harmanFullscreenEnabled) applyFullscreenMode()
+                if (!isDestroyed && harmanFullscreenEnabled &&
+                    generation == windowFocusGeneration && hasWindowFocus()
+                ) {
+                    applyFullscreenMode()
+                }
             }, delayMillis)
         }
     }
@@ -6412,6 +6506,16 @@ class CarPlayHostActivity : ComponentActivity() {
         const val RECONNECT_DELAY_MILLIS = 2_000L
         /** Issue #315: legacy reverse cold start waits this long after reverse exit before restarting the decoder. */
         const val LEGACY_REVERSE_COLD_START_DELAY_MILLIS = 2_500L
+        /** Post-exit restore: debounce before the first focus check, then
+         * the recheck cadence and budget while the camera may still be up. */
+        const val REVERSE_EXIT_RESTORE_DELAY_MILLIS = 600L
+        const val REVERSE_EXIT_RESTORE_RECHECK_MILLIS = 500L
+        const val REVERSE_EXIT_RESTORE_MAX_ATTEMPTS = 5
+        const val LEGACY_REVERSE_RESUME_RECHECK_MILLIS = 800L
+        const val LEGACY_REVERSE_RESUME_MAX_ATTEMPTS = 4
+        /** A reverse manoeuvre never lasts this long; a reverse-active flag
+         * older than this is a missed exit broadcast, not a camera. */
+        const val REVERSE_ACTIVE_GATE_CAP_MILLIS = 120_000L
         /** Issues #275/#243: automatic wired no-TCP retries allowed on pre-Lollipop units before asking for a physical replug. */
         const val WIRED_NO_TCP_FAILURE_LIMIT = 2
         /** Issue #305: automatic wired USB-busy retries allowed before asking for a physical replug. */
