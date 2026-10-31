@@ -1,3 +1,13 @@
+# DiPlay 0.3.11 — 2026-11-01
+
+- Do not rebuild picture on unconfirmed reverse exit (#315, #363): add a 600ms focus-confirmation delay and cancellation on re-engagement, preventing flapped CAN broadcasts from displacing the camera view mid-manoeuvre.
+- Duck media while announcement audio flows (Advanced, experimental) (#364): duck media renderer gain when PCM frames write to navigation, assistant, or phone streams, restoring ~1.5s after speech ends.
+- Re-claim NCM data interface when bulk-OUT wedges at zero completions (#75): release and force-reclaim data interface and alternate setting at failure 12, reviving wedged endpoint transfers without a full bus reset.
+- One MainAudio Untake per session; dedup concurrent USB permission requests (#305, #293): send at most one Untake per wired session to prevent picture freeze, and de-duplicate concurrent permission requests within 12ms.
+- Keep failure teardown off interface and radio (#330, #348): avoid taking down wlan0 or disabling Wi-Fi radio on failed hostapd startup, preventing driver lockups on affected Honda head units.
+
+See [v0.3.11 release notes](docs/RELEASE-NOTES-0.3.11.md) for details.
+
 # DiPlay 0.3.10 — 2026-10-31
 
 - Key the transitional-shrink guard by View instance (#363): record the baseline size when a fresh SurfaceView is created, even if its initial bounds match the previous surface, preventing latched settle shrinks and black borders.
